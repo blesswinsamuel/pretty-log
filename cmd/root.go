@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"os/signal"
 	"sort"
 	"strings"
 	"sync"
@@ -22,6 +23,7 @@ var (
 	messageFieldKey string
 	timeFormat      string
 	showDate        bool
+	showMillis      bool
 
 	rootCmd = &cobra.Command{
 		Use:   "pretty-json-log",
@@ -41,6 +43,7 @@ func init() {
 	rootCmd.Flags().StringVar(&levelFieldKey, "level-field", "level", "field that represents log level")
 	rootCmd.Flags().StringVar(&messageFieldKey, "message-field", "message", "field that represents message")
 	rootCmd.Flags().BoolVar(&showDate, "show-date", false, "show date")
+	rootCmd.Flags().BoolVar(&showMillis, "show-millis", true, "show millis")
 }
 
 func initConfig() {
@@ -48,20 +51,22 @@ func initConfig() {
 
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		log.Println(err)
 		os.Exit(1)
 	}
 }
 
 func prettyJsonLog() {
+	stopCh := make(chan os.Signal, 1)
 	ch := make(chan string, 10)
 
 	wgRead := sync.WaitGroup{}
 	for _, stream := range []io.Reader{os.Stdin} { // os.Stderr, os.Stdout
 		wgRead.Add(1)
 		go func(stream io.Reader) {
-			defer wgRead.Done()
 			readLogs(stream, ch)
+			close(stopCh)
+			wgRead.Done()
 		}(stream)
 	}
 
@@ -72,6 +77,9 @@ func prettyJsonLog() {
 		printLogs(ch)
 	}()
 
+	signal.Notify(stopCh, os.Interrupt)
+
+	<-stopCh
 	wgRead.Wait()
 	close(ch)
 	wgPrint.Wait()
@@ -126,6 +134,9 @@ func printLogs(ch <-chan string) {
 	displayTimeFormat := "15:04:05"
 	if showDate {
 		displayTimeFormat = "2006-01-02 " + displayTimeFormat
+	}
+	if showMillis {
+		displayTimeFormat = displayTimeFormat + ".999"
 	}
 
 	timeColor := color.New(color.FgHiBlack, color.Bold)
