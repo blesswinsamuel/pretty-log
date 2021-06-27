@@ -32,7 +32,7 @@ func main() {
 				"time":    time.Now().Unix(),
 				"message": "this is a test message",
 				"object":  map[string]interface{}{"string": "hey there", "int": 20, "float": 1.2, "bool": true},
-				"string":  "hey there",
+				"string":  "hey there %s",
 				"int":     20,
 				"float":   1.2,
 				"bool":    true,

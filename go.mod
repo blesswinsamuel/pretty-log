@@ -1,5 +1,5 @@
-module pretty-json-log
+module github.com/blesswinsamuel/pretty-json-log
 
 go 1.16
 
-require github.com/fatih/color v1.12.0 // indirect
+require github.com/fatih/color v1.12.0

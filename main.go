@@ -138,7 +138,7 @@ func printLogs(ch <-chan string) {
 		if message == "" {
 			return ""
 		}
-		return messageColor.Sprintf("%s", message)
+		return messageColor.Sprint(message)
 	}
 
 	for log := range ch {
@@ -155,7 +155,7 @@ func printLogs(ch <-chan string) {
 		delete(line, messageFieldKey)
 		fields := []string{}
 		for k, f := range line {
-			fields = append(fields, fmt.Sprintf("%s=%s", fieldKeyColor.Sprintf(k), fieldValueColor.Sprintf(string(f))))
+			fields = append(fields, fmt.Sprintf("%s=%s", fieldKeyColor.Sprint(k), fieldValueColor.Sprint(string(f))))
 		}
 		sort.Strings(fields)
 		fmt.Printf("%s %s %s %s\n", timeColor.Sprint(time), level, message, strings.Join(fields, " "))
