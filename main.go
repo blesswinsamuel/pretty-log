@@ -7,7 +7,6 @@ import (
 	"io"
 	"log"
 	"os"
-	"os/signal"
 	"sort"
 	"strings"
 	"sync"
@@ -41,10 +40,6 @@ func main() {
 		printLogs(ch)
 	}()
 
-	stopCh := make(chan os.Signal, 1)
-	signal.Notify(stopCh, os.Interrupt)
-
-	<-stopCh
 	wgRead.Wait()
 	close(ch)
 	wgPrint.Wait()
