@@ -136,7 +136,7 @@ func printLogs(ch <-chan string) {
 		displayTimeFormat = "2006-01-02 " + displayTimeFormat
 	}
 	if showMillis {
-		displayTimeFormat = displayTimeFormat + ".999"
+		displayTimeFormat = displayTimeFormat + ".000"
 	}
 
 	timeColor := color.New(color.FgHiBlack, color.Bold)
