@@ -1,11 +1,7 @@
-{"level":"info","time":"2021-04-17T09:45:32.137Z","req":{"id":8127,"method":"POST","url":"/graphql"},"res":{"statusCode":200},"responseTime":9,"msg":"request completed"}
-{"level":"info","time":"2021-04-17T09:45:40.243Z","req":{"id":8128,"method":"POST","url":"/graphql"},"res":{"statusCode":200},"responseTime":6,"msg":"request completed"}
+{"level":"trace","time":"2021-04-17T09:45:32.137Z","req":{"id":8127,"method":"POST","url":"/graphql"},"res":{"statusCode":200},"responseTime":9,"msg":"request completed"}
+{"level":"debug","time":"2021-04-17T09:45:40.243Z","req":{"id":8128,"method":"POST","url":"/graphql"},"res":{"statusCode":200},"responseTime":6,"msg":"request completed"}
 {"level":"info","time":"2021-04-17T09:45:40.360Z","req":{"id":8129,"method":"POST","url":"/graphql"},"res":{"statusCode":200},"responseTime":20,"msg":"request completed"}
-{"level":"info","time":"2021-04-17T09:45:45.008Z","req":{"id":8131,"method":"POST","url":"/graphql"},"res":{"statusCode":200},"responseTime":17,"msg":"request completed"}
-{"level":"info","time":"2021-04-17T09:45:48.193Z","req":{"id":8132,"method":"POST","url":"/graphql"},"res":{"statusCode":200},"responseTime":449,"msg":"request completed"}
-{"level":"info","time":"2021-04-17T09:46:10.749Z","req":{"id":8133,"method":"POST","url":"/graphql"},"res":{"statusCode":200},"responseTime":14,"msg":"request completed"}
-{"level":"info","time":"2021-04-17T09:46:45.889Z","req":{"id":8137,"method":"POST","url":"/graphql"},"res":{"statusCode":200},"responseTime":19,"msg":"request completed"}
-{"level":"info","time":"2021-04-17T09:46:55.398Z","req":{"id":8138,"method":"POST","url":"/graphql"},"res":{"statusCode":200},"responseTime":918,"msg":"request completed"}
-{"level":"info","time":"2021-04-17T09:47:03.047Z","req":{"id":8139,"method":"POST","url":"/graphql"},"res":{"statusCode":200},"responseTime":9,"msg":"request completed"}
-{"level":"info","time":"2021-04-17T09:47:03.054Z","req":{"id":8142,"method":"POST","url":"/graphql"},"res":{"statusCode":200},"responseTime":4,"msg":"request completed"}
-{"level":"info","time":"2021-04-17T09:47:03.070Z","req":{"id":8140,"method":"POST","url":"/graphql"},"res":{"statusCode":200},"responseTime":29,"msg":"request completed"}
+{"level":"warn","time":"2021-04-17T09:45:45.008Z","req":{"id":8131,"method":"POST","url":"/graphql"},"res":{"statusCode":200},"responseTime":17,"msg":"request completed"}
+{"level":"error","time":"2021-04-17T09:45:48.193Z","req":{"id":8132,"method":"POST","url":"/graphql"},"res":{"statusCode":200},"responseTime":449,"msg":"request completed"}
+{"level":"fatal","time":"2021-04-17T09:46:10.749Z","req":{"id":8133,"method":"POST","url":"/graphql"},"res":{"statusCode":200},"responseTime":14,"msg":"request completed"}
+{"level":"panic","time":"2021-04-17T09:46:45.889Z","req":{"id":8137,"method":"POST","url":"/graphql"},"res":{"statusCode":200},"responseTime":19,"msg":"request completed"}

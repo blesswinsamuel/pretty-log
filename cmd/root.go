@@ -12,7 +12,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/araddon/dateparse"
 	"github.com/fatih/color"
@@ -23,9 +22,7 @@ var (
 	timeFieldKey    string
 	levelFieldKey   string
 	messageFieldKey string
-	inputTimeFormat string
-	showDate        bool
-	showMillis      bool
+	outputTimeFmt   string
 
 	rootCmd = &cobra.Command{
 		Use:   "pretty-json-log",
@@ -41,11 +38,9 @@ func init() {
 	cobra.OnInitialize(initConfig)
 
 	rootCmd.Flags().StringVar(&timeFieldKey, "time-field", "time", "field that represents time")
-	rootCmd.Flags().StringVar(&inputTimeFormat, "input-time-format", "", "format in which time is represented")
 	rootCmd.Flags().StringVar(&levelFieldKey, "level-field", "level", "field that represents log level")
 	rootCmd.Flags().StringVar(&messageFieldKey, "message-field", "message", "field that represents message")
-	rootCmd.Flags().BoolVar(&showDate, "show-date", false, "show date")
-	rootCmd.Flags().BoolVar(&showMillis, "show-millis", true, "show millis")
+	rootCmd.Flags().StringVar(&outputTimeFmt, "time-format", "{t}{ms}", "time format (eg. '{d} {t}{ms}')")
 }
 
 func initConfig() {
@@ -127,13 +122,8 @@ func printLogs(ch <-chan string) {
 		return v
 	}
 
-	displayTimeFormat := "15:04:05"
-	if showDate {
-		displayTimeFormat = "2006-01-02 " + displayTimeFormat
-	}
-	if showMillis && inputTimeFormat != "unix-s" {
-		displayTimeFormat = displayTimeFormat + ".000"
-	}
+	dateFormatReplacer := strings.NewReplacer("{d}", "2006-01-02", "{t}", "15:04:05", "{ms}", ".000")
+	displayTimeFormat := dateFormatReplacer.Replace(outputTimeFmt)
 
 	timeColor := color.New(color.FgHiBlack, color.Bold)
 	messageColor := color.New(color.FgHiWhite, color.Bold)
@@ -152,20 +142,8 @@ func printLogs(ch <-chan string) {
 		"DEFAULT": color.New(color.FgWhite).Add(color.Bold).Add(color.BgHiBlack),
 	}
 
-	timeFormats := map[string]string{
-		"rfc-3339-nano": time.RFC3339Nano,
-		"iso-8601":      "2006-01-02T15:04:05-0700", // https://stackoverflow.com/a/38596248
-	}
-	timeFmt, ok := timeFormats[inputTimeFormat]
-	if !ok {
-		timeFmt = inputTimeFormat
-	}
-
 	getTime := func() string {
-		ti := getInterfaceField(timeFieldKey, 0)
-		if ti == 0 {
-			return timeColor.Sprint("INVALID TIME")
-		}
+		ti := getInterfaceField(timeFieldKey, "")
 		tstr := ""
 		switch v := ti.(type) {
 		case string:
@@ -175,29 +153,13 @@ func printLogs(ch <-chan string) {
 		case int:
 			tstr = fmt.Sprint(v)
 		}
+		if tstr == "" {
+			return timeColor.Sprint("EMPTY TIME")
+		}
 
-		if timeFmt == "" {
-			layout, err := dateparse.ParseFormat(tstr)
-			if err != nil {
-				log.Printf("Failed to parse date: %v", err)
-				return timeColor.Sprint("INVALID TIME FMT")
-			}
-			if layout != tstr {
-				timeFmt = layout
-			}
-		}
-		if timeFmt == "" {
-			tp, err := dateparse.ParseAny(tstr)
-			if err != nil {
-				log.Println(err)
-				return timeColor.Sprint("INVALID TIME")
-			}
-			return timeColor.Sprint(tp.Local().Format(displayTimeFormat))
-		}
-		tp, err := time.Parse(timeFmt, timeFmt)
+		tp, err := dateparse.ParseAny(tstr)
 		if err != nil {
-			log.Println(err)
-			return timeColor.Sprint("INVALID TIME")
+			return timeColor.Sprintf("INVALID TIME [%v]", err)
 		}
 		return timeColor.Sprint(tp.Local().Format(displayTimeFormat))
 	}
