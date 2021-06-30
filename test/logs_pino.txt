@@ -1,9 +1,10 @@
 {"level":30,"time":1624829360868,"pid":2505893,"hostname":"my-pc","msg":"hello world"}
 {"level":50,"time":1624829360869,"pid":2505893,"hostname":"my-pc","msg":"this is at error level"}
+{"level":40,"time":1624829360869,"pid":2505893,"hostname":"my-pc","msg":"this is at warn level"}
 {"level":30,"time":1624829360869,"pid":2505893,"hostname":"my-pc","msg":"the answer is 42"}
-{"level":30,"time":1624829360869,"pid":2505893,"hostname":"my-pc","obj":42,"msg":"hello world"}
-{"level":30,"time":1624829360869,"pid":2505893,"hostname":"my-pc","obj":42,"b":2,"msg":"hello world"}
-{"level":30,"time":1624829360869,"pid":2505893,"hostname":"my-pc","nested":{"obj":42},"msg":"nested"}
+{"level":30,"time":1624829360869,"pid":2505893,"hostname":"my-pc","obj":42,"msg":"hello world","c":false}
+{"level":30,"time":1624829360869,"pid":2505893,"hostname":"my-pc","obj":42,"b":2,"msg":"hello world","c":true}
+{"level":30,"time":1624829360869,"pid":2505893,"hostname":"my-pc","nested":{"obj":42},"msg":"nested","arr":[1,true,"str",{"foo":"bar"}]}
 {"level":50,"time":1624829360870,"pid":2505893,"hostname":"my-pc","stack":"Error: an error\n    at Object.<anonymous> (/tmp/pinolog/index.js:12:12)\n    at Module._compile (node:internal/modules/cjs/loader:1092:14)\n    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1121:10)\n    at Module.load (node:internal/modules/cjs/loader:972:32)\n    at Function.Module._load (node:internal/modules/cjs/loader:813:14)\n    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:76:12)\n    at node:internal/main/run_main_module:17:47","type":"Error","msg":"an error"}
 {"level":30,"time":1624829360870,"pid":2505893,"hostname":"my-pc","a":"property","msg":"hello child!"}
 {"level":30,"time":1624829360870,"pid":2505893,"hostname":"my-pc","a":"property","another":"property","msg":"hello baby.."}
@@ -15,3 +16,4 @@
 {"level":30,"time":1624829360871,"pid":2505893,"hostname":"my-pc","msg":null}
 {"level":30,"time":1624829360871,"pid":2505893,"hostname":"my-pc","stack":"Error: kaboom\n    at Object.<anonymous> (/tmp/pinolog/index.js:34:11)\n    at Module._compile (node:internal/modules/cjs/loader:1092:14)\n    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1121:10)\n    at Module.load (node:internal/modules/cjs/loader:972:32)\n    at Function.Module._load (node:internal/modules/cjs/loader:813:14)\n    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:76:12)\n    at node:internal/main/run_main_module:17:47","type":"Error","msg":"with"}
 {"level":30,"time":1624829360872,"pid":2505893,"hostname":"my-pc","msg":"after setImmediate"}
+{"level":60,"time":1624829360872,"pid":2505893,"hostname":"my-pc","msg":"this is at fatal level"}

@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/araddon/dateparse"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 )
@@ -22,7 +23,7 @@ var (
 	timeFieldKey    string
 	levelFieldKey   string
 	messageFieldKey string
-	timeFormat      string
+	inputTimeFormat string
 	showDate        bool
 	showMillis      bool
 
@@ -40,7 +41,7 @@ func init() {
 	cobra.OnInitialize(initConfig)
 
 	rootCmd.Flags().StringVar(&timeFieldKey, "time-field", "time", "field that represents time")
-	rootCmd.Flags().StringVar(&timeFormat, "time-format", "unix-s", "format in which time is represented")
+	rootCmd.Flags().StringVar(&inputTimeFormat, "input-time-format", "", "format in which time is represented")
 	rootCmd.Flags().StringVar(&levelFieldKey, "level-field", "level", "field that represents log level")
 	rootCmd.Flags().StringVar(&messageFieldKey, "message-field", "message", "field that represents message")
 	rootCmd.Flags().BoolVar(&showDate, "show-date", false, "show date")
@@ -125,19 +126,12 @@ func printLogs(ch <-chan string) {
 		}
 		return v
 	}
-	getIntField := func(key string, def int64) int64 {
-		v, ok := getInterfaceField(key, def).(float64)
-		if !ok {
-			return def
-		}
-		return int64(v)
-	}
 
 	displayTimeFormat := "15:04:05"
 	if showDate {
 		displayTimeFormat = "2006-01-02 " + displayTimeFormat
 	}
-	if showMillis && timeFormat != "unix-s" {
+	if showMillis && inputTimeFormat != "unix-s" {
 		displayTimeFormat = displayTimeFormat + ".000"
 	}
 
@@ -162,31 +156,45 @@ func printLogs(ch <-chan string) {
 		"rfc-3339-nano": time.RFC3339Nano,
 		"iso-8601":      "2006-01-02T15:04:05-0700", // https://stackoverflow.com/a/38596248
 	}
+	timeFmt, ok := timeFormats[inputTimeFormat]
+	if !ok {
+		timeFmt = inputTimeFormat
+	}
 
 	getTime := func() string {
-		switch timeFormat {
-		case "unix-s":
-			ti := getIntField(timeFieldKey, 0)
-			if ti == 0 {
-				return timeColor.Sprint("INVALID TIME")
-			}
-			return timeColor.Sprint(time.Unix(ti, 0).Local().Format(displayTimeFormat))
-		case "unix-ms":
-			ti := getIntField(timeFieldKey, 0)
-			if ti == 0 {
-				return timeColor.Sprint("INVALID TIME")
-			}
-			return timeColor.Sprint(time.Unix(0, ti*int64(time.Millisecond)).Local().Format(displayTimeFormat))
-		}
-		timeFmt, ok := timeFormats[timeFormat]
-		if !ok {
-			timeFmt = timeFormat
-		}
-		ti := getStringField(timeFieldKey, "")
-		if ti == "" {
+		ti := getInterfaceField(timeFieldKey, 0)
+		if ti == 0 {
 			return timeColor.Sprint("INVALID TIME")
 		}
-		tp, err := time.Parse(timeFmt, ti)
+		tstr := ""
+		switch v := ti.(type) {
+		case string:
+			tstr = v
+		case float64:
+			tstr = fmt.Sprint(int64(v))
+		case int:
+			tstr = fmt.Sprint(v)
+		}
+
+		if timeFmt == "" {
+			layout, err := dateparse.ParseFormat(tstr)
+			if err != nil {
+				log.Printf("Failed to parse date: %v", err)
+				return timeColor.Sprint("INVALID TIME FMT")
+			}
+			if layout != tstr {
+				timeFmt = layout
+			}
+		}
+		if timeFmt == "" {
+			tp, err := dateparse.ParseAny(tstr)
+			if err != nil {
+				log.Println(err)
+				return timeColor.Sprint("INVALID TIME")
+			}
+			return timeColor.Sprint(tp.Local().Format(displayTimeFormat))
+		}
+		tp, err := time.Parse(timeFmt, timeFmt)
 		if err != nil {
 			log.Println(err)
 			return timeColor.Sprint("INVALID TIME")
@@ -291,7 +299,7 @@ func printLogs(ch <-chan string) {
 
 func sortedKeys(m map[string]interface{}) []string {
 	res := []string{}
-	for k, _ := range m {
+	for k := range m {
 		res = append(res, k)
 	}
 	sort.Strings(res)

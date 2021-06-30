@@ -22,7 +22,7 @@ go get -u github.com/blesswinsamuel/pretty-json-log
 ./your-application | pretty-json-log
 ```
 
-Use `pretty-json-log --help` for usage information.
+See `pretty-json-log --help` for usage information.
 
 ## Development
 
