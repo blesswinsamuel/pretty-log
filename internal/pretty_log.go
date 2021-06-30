@@ -26,10 +26,46 @@ type PrettyJsonLogConfig struct {
 
 type PrettyJsonLog struct {
 	config PrettyJsonLogConfig
+
+	timeColor         *color.Color
+	messageColor      *color.Color
+	fieldKeyColor     *color.Color
+	logColors         map[string]*color.Color
+	intLevels         map[int]string
+	displayTimeFormat string
 }
 
 func NewPrettyJsonLog(config PrettyJsonLogConfig) *PrettyJsonLog {
-	return &PrettyJsonLog{config}
+	dateFormatReplacer := strings.NewReplacer("{d}", "2006-01-02", "{t}", "15:04:05", "{ms}", ".000")
+
+	p := &PrettyJsonLog{
+		config:            config,
+		displayTimeFormat: dateFormatReplacer.Replace(config.OutputTimeFmt),
+
+		timeColor:     color.New(color.FgHiBlack, color.Bold),
+		messageColor:  color.New(color.FgHiWhite, color.Bold),
+		fieldKeyColor: color.New(color.FgHiBlack),
+		logColors: map[string]*color.Color{
+			"PANIC": color.New(color.FgRed, color.Bold, color.BgHiWhite),
+			"FATAL": color.New(color.FgHiWhite, color.Bold, color.BgRed),
+			"ERROR": color.New(color.FgHiWhite, color.Bold, color.BgHiRed),
+			"WARN":  color.New(color.FgHiBlack, color.Bold, color.BgHiYellow),
+			"INFO":  color.New(color.FgHiWhite, color.Bold, color.BgHiBlue),
+			"DEBUG": color.New(color.FgHiWhite, color.Bold, color.BgHiBlack),
+			"TRACE": color.New(color.FgHiWhite, color.Bold, color.BgBlack),
+
+			"DEFAULT": color.New(color.FgWhite).Add(color.Bold).Add(color.BgHiBlack),
+		},
+		intLevels: map[int]string{
+			10: "trace",
+			20: "debug",
+			30: "info",
+			40: "warn",
+			50: "error",
+			60: "fatal",
+		},
+	}
+	return p
 }
 
 func (p *PrettyJsonLog) Run() {
@@ -77,108 +113,80 @@ func readLogs(reader io.Reader, ch chan<- string) {
 }
 
 func (p *PrettyJsonLog) printLogs(ch <-chan string) {
-	var line map[string]json.RawMessage
-
-	getInterfaceField := func(key string, def interface{}) interface{} {
-		vraw, ok := line[key]
-		if !ok {
-			return def
-		}
-		var vi interface{}
-		if err := json.Unmarshal(vraw, &vi); err != nil {
-			return def
-		}
-		// fmt.Println(fmt.Sprintf("%T", vi))
-		return vi
-	}
-
-	getStringField := func(key string, def string) string {
-		vi := getInterfaceField(key, def)
-		v, ok := vi.(string)
-		if !ok {
-			return def // fmt.Sprint(vi)
-		}
-		return v
-	}
-
-	dateFormatReplacer := strings.NewReplacer("{d}", "2006-01-02", "{t}", "15:04:05", "{ms}", ".000")
-	displayTimeFormat := dateFormatReplacer.Replace(p.config.OutputTimeFmt)
-
-	timeColor := color.New(color.FgHiBlack, color.Bold)
-	messageColor := color.New(color.FgHiWhite, color.Bold)
-
-	fieldKeyColor := color.New(color.FgHiBlack)
-
-	logColors := map[string]*color.Color{
-		"PANIC": color.New(color.FgRed, color.Bold, color.BgHiWhite),
-		"FATAL": color.New(color.FgHiWhite, color.Bold, color.BgRed),
-		"ERROR": color.New(color.FgHiWhite, color.Bold, color.BgHiRed),
-		"WARN":  color.New(color.FgHiBlack, color.Bold, color.BgHiYellow),
-		"INFO":  color.New(color.FgHiWhite, color.Bold, color.BgHiBlue),
-		"DEBUG": color.New(color.FgHiWhite, color.Bold, color.BgHiBlack),
-		"TRACE": color.New(color.FgHiWhite, color.Bold, color.BgBlack),
-
-		"DEFAULT": color.New(color.FgWhite).Add(color.Bold).Add(color.BgHiBlack),
-	}
-
-	getTime := func() string {
-		ti := getInterfaceField(p.config.TimeFieldKey, "")
-		tstr := ""
-		switch v := ti.(type) {
-		case string:
-			tstr = v
-		case float64:
-			tstr = fmt.Sprint(int64(v))
-		case int:
-			tstr = fmt.Sprint(v)
-		}
-		if tstr == "" {
-			return timeColor.Sprint("EMPTY TIME")
-		}
-
-		tp, err := dateparse.ParseAny(tstr)
+	for logLine := range ch {
+		line, err := NewLogLine(logLine, p)
 		if err != nil {
-			return timeColor.Sprintf("INVALID TIME [%v]", err)
+			log.Println(err)
+			continue
 		}
-		return timeColor.Sprint(tp.Local().Format(displayTimeFormat))
+		fmt.Printf("%s %s %s %s\n", line.getTime(), line.getLevel(), line.getMessage(), line.getFields())
+	}
+}
+
+type logLine struct {
+	line map[string]json.RawMessage
+	p    *PrettyJsonLog
+}
+
+func NewLogLine(log string, p *PrettyJsonLog) (*logLine, error) {
+	var line map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(log), &line); err != nil {
+		return nil, err
+	}
+	return &logLine{line, p}, nil
+}
+
+func (l *logLine) getTime() string {
+	ti := l.getInterfaceField(l.p.config.TimeFieldKey, "")
+	tstr := ""
+	switch v := ti.(type) {
+	case string:
+		tstr = v
+	case float64:
+		tstr = fmt.Sprint(int64(v))
+	case int:
+		tstr = fmt.Sprint(v)
+	}
+	if tstr == "" {
+		return l.p.timeColor.Sprint("EMPTY TIME")
 	}
 
-	intLevels := map[int]string{
-		10: "trace",
-		20: "debug",
-		30: "info",
-		40: "warn",
-		50: "error",
-		60: "fatal",
+	tp, err := dateparse.ParseAny(tstr)
+	if err != nil {
+		return l.p.timeColor.Sprintf("INVALID TIME [%v]", err)
 	}
+	return l.p.timeColor.Sprint(tp.Local().Format(l.p.displayTimeFormat))
+}
 
-	normalizeLogLevel := func(l interface{}) string {
-		switch l := l.(type) {
+func (l *logLine) getMessage() string {
+	msg := l.getStringField(l.p.config.MessageFieldKey, color.New(color.FgHiRed).Sprint("null"))
+	return l.p.messageColor.Sprint(msg)
+}
+
+func (l *logLine) getLevel() string {
+	normalizeLogLevel := func(lv interface{}) string {
+		switch lv := lv.(type) {
 		case float64:
-			level, ok := intLevels[int(l)]
+			level, ok := l.p.intLevels[int(lv)]
 			if !ok {
 				return fmt.Sprint(l)
 			}
 			return strings.ToUpper(level)
 		case string:
-			return strings.ToUpper(l)
+			return strings.ToUpper(lv)
 		}
-		return fmt.Sprint(l)
+		return fmt.Sprint(lv)
 	}
 
-	getLevel := func() string {
-		level := normalizeLogLevel(getInterfaceField(p.config.LevelFieldKey, "unknown"))
-		c, ok := logColors[level]
-		if !ok {
-			return logColors["DEFAULT"].Sprint(level)
-		}
-		return c.Sprintf("%5s", level)
+	level := normalizeLogLevel(l.getInterfaceField(l.p.config.LevelFieldKey, "unknown"))
+	c, ok := l.p.logColors[level]
+	if !ok {
+		return l.p.logColors["DEFAULT"].Sprint(level)
 	}
+	return c.Sprintf("%5s", level)
+}
 
-	getMessage := func() string {
-		return messageColor.Sprint(getStringField(p.config.MessageFieldKey, color.New(color.FgHiRed).Sprint("null")))
-	}
-
+func (l *logLine) getFields() string {
 	getField := func(k string, f json.RawMessage) string {
 		var getFieldValue func(vi interface{}) string
 		getFieldValue = func(vi interface{}) string {
@@ -192,14 +200,14 @@ func (p *PrettyJsonLog) printLogs(ch <-chan string) {
 			case map[string]interface{}:
 				res := []string{}
 				for _, k := range sortedKeys(vi) {
-					res = append(res, fmt.Sprintf("%s=%s", fieldKeyColor.Sprint(k), getFieldValue(vi[k])))
+					res = append(res, fmt.Sprintf("%s=%s", l.p.fieldKeyColor.Sprint(k), getFieldValue(vi[k])))
 				}
 				c := color.New(color.FgHiYellow)
 				return fmt.Sprintf("%s%s%s", c.Sprint("{"), strings.Join(res, c.Sprint(", ")), c.Sprint("}"))
 			case []interface{}:
 				res := []string{}
 				for _, v := range vi {
-					res = append(res, fmt.Sprint(getFieldValue(v)))
+					res = append(res, getFieldValue(v))
 				}
 				c := color.New(color.FgHiMagenta)
 				return fmt.Sprintf("%s%s%s", c.Sprint("["), strings.Join(res, c.Sprint(", ")), c.Sprint("]"))
@@ -214,28 +222,40 @@ func (p *PrettyJsonLog) printLogs(ch <-chan string) {
 		if err := d.Decode(&vi); err != nil {
 			return ""
 		}
-		return fmt.Sprintf("%s=%s", fieldKeyColor.Sprint(k), getFieldValue(vi))
-	}
 
-	for log := range ch {
-		line = map[string]json.RawMessage{}
-		if err := json.Unmarshal([]byte(log), &line); err != nil {
-			fmt.Println(log)
-			continue
-		}
-		level := getLevel()
-		delete(line, p.config.LevelFieldKey)
-		time := getTime()
-		delete(line, p.config.TimeFieldKey)
-		message := getMessage()
-		delete(line, p.config.MessageFieldKey)
-		fields := []string{}
-		for k, f := range line {
-			fields = append(fields, getField(k, f))
-		}
-		sort.Strings(fields)
-		fmt.Printf("%s %s %s %s\n", time, level, message, strings.Join(fields, " "))
+		return fmt.Sprintf("%s=%s", l.p.fieldKeyColor.Sprint(k), getFieldValue(vi))
 	}
+	delete(l.line, l.p.config.LevelFieldKey)
+	delete(l.line, l.p.config.TimeFieldKey)
+	delete(l.line, l.p.config.MessageFieldKey)
+	fields := []string{}
+	for k, f := range l.line {
+		fields = append(fields, getField(k, f))
+	}
+	sort.Strings(fields)
+	return strings.Join(fields, " ")
+}
+
+func (l *logLine) getInterfaceField(key string, def interface{}) interface{} {
+	vraw, ok := l.line[key]
+	if !ok {
+		return def
+	}
+	var vi interface{}
+	if err := json.Unmarshal(vraw, &vi); err != nil {
+		return def
+	}
+	// fmt.Println(fmt.Sprintf("%T", vi))
+	return vi
+}
+
+func (l *logLine) getStringField(key string, def string) string {
+	vi := l.getInterfaceField(key, def)
+	v, ok := vi.(string)
+	if !ok {
+		return def // fmt.Sprint(vi)
+	}
+	return v
 }
 
 func sortedKeys(m map[string]interface{}) []string {
