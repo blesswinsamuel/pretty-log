@@ -116,7 +116,8 @@ func (p *PrettyJsonLog) printLogs(ch <-chan string) {
 	for logLine := range ch {
 		line, err := NewLogLine(logLine, p)
 		if err != nil {
-			log.Println(err)
+			// log.Println(err)
+			fmt.Println(logLine)
 			continue
 		}
 		fmt.Printf("%s %s %s %s\n", line.getTime(), line.getLevel(), line.getMessage(), line.getFields())

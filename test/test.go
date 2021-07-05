@@ -21,6 +21,9 @@ func main() {
 	i := 0
 
 	generateLog := func() string {
+		if i%10 == 0 {
+			fmt.Println("Plain log line")
+		}
 		v, _ := json.Marshal(map[string]interface{}{
 			"level":   levels[i%len(levels)],
 			"time":    time.Now().Unix(),
