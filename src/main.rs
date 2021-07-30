@@ -29,7 +29,13 @@ fn main() {
                 match v {
                     Ok(s) => match s.as_object() {
                         Some(obj) => {
-                            println!("{}", obj[&opts.level_field]);
+                            let level = obj[&opts.level_field].as_str().unwrap_or("UNKNOWN");
+                            let time = match (obj[&opts.time_field].as_str(), obj[&opts.time_field].as_i64()) {
+                                (Some(str_val), None) => {""}
+                                (None, Some(int_val)) => {""}
+                                (_, _) => "UNKNOWN TIME"
+                            };
+                            println!("{}, {}", time, level);
                         }
                         None => {
                             println!("None")
