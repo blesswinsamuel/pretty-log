@@ -25,9 +25,9 @@ var (
 func init() {
 	cobra.OnInitialize(initConfig)
 
-	rootCmd.Flags().StringVar(&prettyJsonLogConfig.TimeFieldKey, "time-field", "time", "field that represents time")
-	rootCmd.Flags().StringVar(&prettyJsonLogConfig.LevelFieldKey, "level-field", "level", "field that represents log level")
-	rootCmd.Flags().StringVar(&prettyJsonLogConfig.MessageFieldKey, "message-field", "message", "field that represents message")
+	rootCmd.Flags().StringVar(&prettyJsonLogConfig.TimeFieldKey, "time-field", "time,timestamp", "field that represents time")
+	rootCmd.Flags().StringVar(&prettyJsonLogConfig.LevelFieldKey, "level-field", "level,lvl", "field that represents log level")
+	rootCmd.Flags().StringVar(&prettyJsonLogConfig.MessageFieldKey, "message-field", "message,msg", "field that represents message")
 	rootCmd.Flags().StringVar(&prettyJsonLogConfig.OutputTimeFmt, "time-format", "{t}{ms}", "time format (eg. '{d} {t}{ms}')")
 }
 

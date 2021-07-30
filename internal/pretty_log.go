@@ -120,7 +120,10 @@ func (p *PrettyJsonLog) printLogs(ch <-chan string) {
 			fmt.Println(logLine)
 			continue
 		}
-		fmt.Printf("%s %s %s %s\n", line.getTime(), line.getLevel(), line.getMessage(), line.getFields())
+		l := line.popLevel()
+		t := line.popTime()
+		m := line.popMessage()
+		fmt.Printf("%s %s %s %s\n", t, l, m, line.getFields())
 	}
 }
 
@@ -137,40 +140,53 @@ func NewLogLine(log string, p *PrettyJsonLog) (*logLine, error) {
 	return &logLine{line, p}, nil
 }
 
-func (l *logLine) getTime() string {
-	ti := l.getInterfaceField(l.p.config.TimeFieldKey, "")
-	tstr := ""
-	switch v := ti.(type) {
-	case string:
-		tstr = v
-	case float64:
-		tstr = fmt.Sprint(int64(v))
-	case int:
-		tstr = fmt.Sprint(v)
-	}
-	if tstr == "" {
-		return l.p.timeColor.Sprint("EMPTY TIME")
-	}
+func (l *logLine) popTime() string {
+	timeKeys := strings.Split(l.p.config.TimeFieldKey, ",")
+	for _, timeKey := range timeKeys {
+		ti := l.getInterfaceField(timeKey, "")
+		tstr := ""
+		switch v := ti.(type) {
+		case string:
+			tstr = v
+		case float64:
+			tstr = fmt.Sprint(int64(v))
+		case int:
+			tstr = fmt.Sprint(v)
+		}
+		if tstr == "" {
+			continue
+		}
 
-	tp, err := dateparse.ParseAny(tstr)
-	if err != nil {
-		return l.p.timeColor.Sprintf("INVALID TIME [%v]", err)
+		tp, err := dateparse.ParseAny(tstr)
+		if err != nil {
+			return l.p.timeColor.Sprintf("INVALID TIME [%v]", err)
+		}
+		delete(l.line, timeKey)
+		return l.p.timeColor.Sprint(tp.Local().Format(l.p.displayTimeFormat))
 	}
-	return l.p.timeColor.Sprint(tp.Local().Format(l.p.displayTimeFormat))
+	return l.p.timeColor.Sprint("EMPTY TIME")
 }
 
-func (l *logLine) getMessage() string {
-	msg := l.getStringField(l.p.config.MessageFieldKey, color.New(color.FgHiRed).Sprint("null"))
-	return l.p.messageColor.Sprint(msg)
+func (l *logLine) popMessage() string {
+	messageKeys := strings.Split(l.p.config.MessageFieldKey, ",")
+	for _, messageKey := range messageKeys {
+		msg := l.getStringField(messageKey, "")
+		if msg == "" {
+			continue
+		}
+		delete(l.line, messageKey)
+		return l.p.messageColor.Sprint(msg)
+	}
+	return color.New(color.FgHiRed).Sprint("null")
 }
 
-func (l *logLine) getLevel() string {
+func (l *logLine) popLevel() string {
 	normalizeLogLevel := func(lv interface{}) string {
 		switch lv := lv.(type) {
 		case float64:
 			level, ok := l.p.intLevels[int(lv)]
 			if !ok {
-				return fmt.Sprint(l)
+				return fmt.Sprint(lv)
 			}
 			return strings.ToUpper(level)
 		case string:
@@ -179,7 +195,16 @@ func (l *logLine) getLevel() string {
 		return fmt.Sprint(lv)
 	}
 
-	level := normalizeLogLevel(l.getInterfaceField(l.p.config.LevelFieldKey, "unknown"))
+	levelKeys := strings.Split(l.p.config.LevelFieldKey, ",")
+	level := ""
+	for _, levelKey := range levelKeys {
+		lvl := normalizeLogLevel(l.getInterfaceField(levelKey, ""))
+		if lvl != "" {
+			delete(l.line, levelKey)
+			level = lvl
+			break
+		}
+	}
 	c, ok := l.p.logColors[level]
 	if !ok {
 		return l.p.logColors["DEFAULT"].Sprint(level)
@@ -226,9 +251,6 @@ func (l *logLine) getFields() string {
 
 		return fmt.Sprintf("%s=%s", l.p.fieldKeyColor.Sprint(k), getFieldValue(vi))
 	}
-	delete(l.line, l.p.config.LevelFieldKey)
-	delete(l.line, l.p.config.TimeFieldKey)
-	delete(l.line, l.p.config.MessageFieldKey)
 	var fields []string
 	for k, f := range l.line {
 		fields = append(fields, getField(k, f))
