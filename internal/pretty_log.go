@@ -73,7 +73,7 @@ func (p *PrettyJsonLog) Run() {
 	ch := make(chan string, 10)
 
 	wgRead := sync.WaitGroup{}
-	for _, stream := range []io.Reader{os.Stdin} { // os.Stderr, os.Stdout
+	for _, stream := range []io.Reader{os.Stdin} {
 		wgRead.Add(1)
 		go func(stream io.Reader) {
 			readLogs(stream, ch)
@@ -98,7 +98,7 @@ func (p *PrettyJsonLog) Run() {
 }
 
 func readLogs(reader io.Reader, ch chan<- string) {
-	scanner := bufio.NewScanner(os.Stdin)
+	scanner := bufio.NewScanner(reader)
 
 	for scanner.Scan() {
 		text := scanner.Text()
@@ -199,14 +199,14 @@ func (l *logLine) getFields() string {
 			case bool:
 				return color.New(color.FgHiGreen).Sprint(vi)
 			case map[string]interface{}:
-				res := []string{}
-				for _, k := range sortedKeys(vi) {
-					res = append(res, fmt.Sprintf("%s=%s", l.p.fieldKeyColor.Sprint(k), getFieldValue(vi[k])))
-				}
+				var res []string
 				c := color.New(color.FgHiYellow)
+				for _, k := range sortedKeys(vi) {
+					res = append(res, fmt.Sprintf("%s%s%s", l.p.fieldKeyColor.Sprint(k), c.Sprint(":"), getFieldValue(vi[k])))
+				}
 				return fmt.Sprintf("%s%s%s", c.Sprint("{"), strings.Join(res, c.Sprint(", ")), c.Sprint("}"))
 			case []interface{}:
-				res := []string{}
+				var res []string
 				for _, v := range vi {
 					res = append(res, getFieldValue(v))
 				}
@@ -229,7 +229,7 @@ func (l *logLine) getFields() string {
 	delete(l.line, l.p.config.LevelFieldKey)
 	delete(l.line, l.p.config.TimeFieldKey)
 	delete(l.line, l.p.config.MessageFieldKey)
-	fields := []string{}
+	var fields []string
 	for k, f := range l.line {
 		fields = append(fields, getField(k, f))
 	}
@@ -260,7 +260,7 @@ func (l *logLine) getStringField(key string, def string) string {
 }
 
 func sortedKeys(m map[string]interface{}) []string {
-	res := []string{}
+	var res []string
 	for k := range m {
 		res = append(res, k)
 	}
