@@ -1,7 +1,6 @@
 use chrono::prelude::*;
 use clap::{AppSettings, Clap};
 use colored::{Color, ColoredString, Colorize};
-use regex::Regex;
 use serde_json::Map;
 use serde_json::{Result, Value};
 use std::io::{self, BufRead};
@@ -13,13 +12,13 @@ use std::io::{self, BufRead};
 #[clap(setting = AppSettings::ColoredHelp)]
 struct Opts {
     /// Field that represents time
-    #[clap(short, long, default_value = "time")]
+    #[clap(short, long, default_value = "time,timestamp")]
     time_field: String,
     /// Field that represents level
-    #[clap(short, long, default_value = "level")]
+    #[clap(short, long, default_value = "level,lvl")]
     level_field: String,
     /// Field that represents message
-    #[clap(short, long, default_value = "message")]
+    #[clap(short, long, default_value = "message,msg")]
     message_field: String,
 }
 
@@ -49,15 +48,15 @@ fn main() {
                 continue;
             }
         };
-        let time_str = get_time(&obj, &opts.time_field);
-        let level_str = get_level(&obj, &opts.level_field);
-        let message_str = get_message(&obj, &opts.message_field);
-        let fields_str = get_fields(&obj);
+        let (time_str, time_key) = get_time(&obj, &opts.time_field);
+        let (level_str, level_key) = get_level(&obj, &opts.level_field);
+        let (message_str, message_key) = get_message(&obj, &opts.message_field);
+        let fields_str = get_fields(&obj, [time_key, level_key, message_key].iter().cloned().collect());
         println!("{} {} {} {}", time_str, level_str, message_str, fields_str);
     }
 }
 
-fn get_time(obj: &Map<String, Value>, key: &str) -> ColoredString {
+fn get_time(obj: &Map<String, Value>, key: &str) -> (ColoredString, String) {
     fn human_readable_date_from_string(s: &str) -> Option<DateTime<Local>> {
         let rfc3339 = DateTime::parse_from_rfc3339(s).ok();
         if rfc3339.is_some() {
@@ -76,20 +75,29 @@ fn get_time(obj: &Map<String, Value>, key: &str) -> ColoredString {
             None
         }
     }
-    let v = obj.get(key).unwrap_or(&Value::Null);
-    let date = match v {
-        Value::Number(n) => human_readable_date_from_int(n.as_i64().unwrap_or_default()),
-        Value::String(s) => human_readable_date_from_string(s),
-        _ => None,
-    };
-    match date {
-        Some(d) => format!("{}", d.format("%H:%M:%S.%3f")),
-        None => v.to_string(),
+    for key in key.split(",") {
+        let v = obj.get(key);
+        if v.is_none() {
+            continue;
+        }
+        let v = v.unwrap_or(&Value::Null);
+        let date = match v {
+            Value::Number(n) => human_readable_date_from_int(n.as_i64().unwrap_or_default()),
+            Value::String(s) => human_readable_date_from_string(s),
+            _ => None,
+        };
+        let now = Local::now().time();
+        let v = match date {
+            Some(d) if d.hour() != now.hour() => format!("{}", d.format("%Y-%m-%d %H:%M:%S.%3f")),
+            Some(d) => format!("{}", d.format("%H:%M:%S.%3f")),
+            None => v.to_string(),
+        };
+        return (v.color(Color::BrightBlack), key.to_string());
     }
-    .color(Color::BrightBlack)
+    return ("EMPTY TIME".color(Color::BrightBlack), "".to_string());
 }
 
-fn get_level(obj: &Map<String, Value>, key: &str) -> ColoredString {
+fn get_level(obj: &Map<String, Value>, key: &str) -> (ColoredString, String) {
     fn normalize_int_log_level(v: u64) -> String {
         match v {
             10 => "trace".to_string(),
@@ -98,7 +106,7 @@ fn get_level(obj: &Map<String, Value>, key: &str) -> ColoredString {
             40 => "warn".to_string(),
             50 => "error".to_string(),
             60 => "fatal".to_string(),
-            _ => v.to_string(),
+            _ => format!("UNKNOWN ({})", v),
         }
     }
     fn colorize_log_level(v: String) -> ColoredString {
@@ -111,29 +119,44 @@ fn get_level(obj: &Map<String, Value>, key: &str) -> ColoredString {
             "INFO" => pad_level(v).color(Color::BrightWhite).on_color(Color::BrightBlue).bold(),
             "DEBUG" => pad_level(v).color(Color::BrightWhite).on_color(Color::BrightBlack).bold(),
             "TRACE" => pad_level(v).color(Color::BrightWhite).on_color(Color::Black).bold(),
-            _ => v.color(Color::BrightWhite).on_color(Color::Black).bold(),
+            _ => v.color(Color::BrightWhite).on_color(Color::BrightBlack).bold(),
         }
     }
 
-    let v = obj.get(key).unwrap_or(&Value::Null);
-    let normalized_level = match v {
-        Value::Number(n) => normalize_int_log_level(n.as_u64().unwrap_or(0)),
-        Value::String(s) => s.clone(),
-        _ => "INVALID".to_string(),
-    };
-    return colorize_log_level(normalized_level.to_uppercase());
-}
-
-fn get_message(obj: &Map<String, Value>, key: &str) -> ColoredString {
-    let v = obj.get(key).unwrap_or(&Value::Null);
-    match v {
-        Value::Number(n) => n.to_string().color(Color::White).bold(),
-        Value::String(s) => s.clone().color(Color::White).bold(),
-        _ => "".to_string().color(Color::White).bold(),
+    for key in key.split(",") {
+        let v = obj.get(key);
+        if v.is_none() {
+            continue;
+        }
+        let v = v.unwrap_or(&Value::Null);
+        let normalized_level = match v {
+            Value::Number(n) => normalize_int_log_level(n.as_u64().unwrap_or(0)),
+            Value::String(s) => s.clone(),
+            _ => format!("invalid ({})", v),
+        };
+        return (colorize_log_level(normalized_level.to_uppercase()), key.to_string());
     }
+    return ("EMPTY".color(Color::BrightBlack).on_color(Color::BrightYellow).bold(), "".to_string());
 }
 
-fn get_fields(obj: &Map<String, Value>) -> String {
+fn get_message(obj: &Map<String, Value>, key: &str) -> (ColoredString, String) {
+    for key in key.split(",") {
+        let v = obj.get(key);
+        if v.is_none() {
+            continue;
+        }
+        let v = v.unwrap_or(&Value::Null);
+        let v = match v {
+            Value::Number(n) => n.to_string().color(Color::White).bold(),
+            Value::String(s) => s.clone().color(Color::White).bold(),
+            _ => v.to_string().color(Color::BrightRed).bold(),
+        };
+        return (v, key.to_string());
+    }
+    return ("null".color(Color::BrightRed).bold(), "".to_string());
+}
+
+fn get_fields(obj: &Map<String, Value>, exclude_fields: std::collections::HashSet<String>) -> String {
     fn get_field(k: &str, v: &Value) -> String {
         fn get_field_value(v: &Value) -> String {
             match v {
@@ -143,7 +166,12 @@ fn get_fields(obj: &Map<String, Value>) -> String {
                 Value::Object(map) => {
                     let mut res: Vec<String> = vec![];
                     for (k, v) in map {
-                        res.push(format!("{}={}", k.color(Color::BrightBlack), get_field_value(v)));
+                        res.push(format!(
+                            "{}{}{}",
+                            k.color(Color::BrightBlack),
+                            ":".color(Color::BrightYellow),
+                            get_field_value(v)
+                        ));
                     }
                     format!(
                         "{}{}{}",
@@ -171,6 +199,9 @@ fn get_fields(obj: &Map<String, Value>) -> String {
     }
     let mut res: Vec<String> = vec![];
     for (k, f) in obj {
+        if exclude_fields.contains(k) {
+            continue;
+        }
         res.push(get_field(k, f));
     }
     res.join(" ")
