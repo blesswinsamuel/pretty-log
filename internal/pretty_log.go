@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"syscall"
 
 	"github.com/araddon/dateparse"
 	"github.com/fatih/color"
@@ -89,7 +90,11 @@ func (p *PrettyJsonLog) Run() {
 		p.printLogs(ch)
 	}()
 
-	signal.Notify(stopCh, os.Interrupt)
+	signal.Notify(stopCh,
+		syscall.SIGHUP,
+		syscall.SIGINT,
+		syscall.SIGTERM,
+		syscall.SIGQUIT)
 
 	<-stopCh
 	wgRead.Wait()
