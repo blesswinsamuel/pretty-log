@@ -3,7 +3,10 @@ use clap::{AppSettings, Clap};
 use colored::{Color, ColoredString, Colorize};
 use serde_json::Map;
 use serde_json::{Result, Value};
+use signal_hook::iterator::Signals;
 use std::io::{self, BufRead};
+use std::os::raw::c_int;
+use std::thread;
 
 /// This doc string acts as a help message when the user runs '--help'
 /// as do all doc strings on fields
@@ -22,75 +25,98 @@ struct Opts {
     message_field: String,
 }
 
+fn program_log(msg: &str) {
+    eprintln!("{} {}", "<pretty-json-log>".color(Color::BrightBlack), msg)
+}
+
 fn main() {
     let opts: Opts = Opts::parse();
+    thread::scope(|s| {
+        s.spawn(move || {
+            const SIGNALS: &[c_int] = &[
+                signal_hook::consts::SIGHUP,
+                signal_hook::consts::SIGINT,
+                signal_hook::consts::SIGTERM,
+                signal_hook::consts::SIGQUIT,
+            ];
+            let mut sigs = Signals::new(SIGNALS).unwrap();
 
-    let input = io::stdin();
-    for line in input.lock().lines() {
-        let l = match line {
-            Ok(l) => l,
-            Err(err) => {
-                println!("{}", err);
-                continue;
+            for signal in &mut sigs {
+                program_log(&format!("Received signal {:?}", signal));
+                // After printing it, do whatever the signal was supposed to do in the first place
+                // low_level::emulate_default_handler(signal).unwrap();
+                break;
             }
-        };
-        let s = match serde_json::from_str(&l) as Result<Value> {
-            Ok(s) => s,
-            Err(_) => {
-                println!("{}", l);
-                continue;
+        });
+        s.spawn(move || {
+            let input = io::stdin();
+            for line in input.lock().lines() {
+                let l = match line {
+                    Ok(l) => l,
+                    Err(err) => {
+                        program_log(&format!("Error: {:?}", err));
+                        continue;
+                    }
+                };
+                let s = match serde_json::from_str(&l) as Result<Value> {
+                    Ok(s) => s,
+                    Err(_) => {
+                        println!("{}", l);
+                        continue;
+                    }
+                };
+                let obj = match s.as_object() {
+                    Some(v) => v,
+                    None => {
+                        println!("None");
+                        continue;
+                    }
+                };
+                let (time_str, time_key) = get_time(&obj, &opts.time_field);
+                let (level_str, level_key) = get_level(&obj, &opts.level_field);
+                let (message_str, message_key) = get_message(&obj, &opts.message_field);
+                let fields_str = get_fields(&obj, [time_key, level_key, message_key].iter().cloned().collect());
+                println!("{} {} {} {}", time_str, level_str, message_str, fields_str);
             }
-        };
-        let obj = match s.as_object() {
-            Some(v) => v,
-            None => {
-                println!("None");
-                continue;
-            }
-        };
-        let (time_str, time_key) = get_time(&obj, &opts.time_field);
-        let (level_str, level_key) = get_level(&obj, &opts.level_field);
-        let (message_str, message_key) = get_message(&obj, &opts.message_field);
-        let fields_str = get_fields(&obj, [time_key, level_key, message_key].iter().cloned().collect());
-        println!("{} {} {} {}", time_str, level_str, message_str, fields_str);
-    }
+            program_log("Stopping");
+        });
+    });
 }
 
 fn get_time(obj: &Map<String, Value>, key: &str) -> (ColoredString, String) {
     fn human_readable_date_from_string(s: &str) -> Option<DateTime<Local>> {
-        let rfc3339 = DateTime::parse_from_rfc3339(s).ok();
-        if rfc3339.is_some() {
-            return rfc3339.map(|v| v.with_timezone(&Local));
-        }
-        None
+        dateparser::parse_with_timezone(s, &Local).map(|v| v.with_timezone(&Local)).ok()
     }
     fn human_readable_date_from_int(v: i64) -> Option<DateTime<Local>> {
         if v <= 1e11 as i64 {
             // 10 digits
-            Some(Local.timestamp(v, 0))
+            Local.timestamp_opt(v, 0).single()
         } else if v < 1e14 as i64 {
             // 13 digits
-            Some(Local.timestamp_millis(v))
+            Local.timestamp_millis_opt(v).single()
         } else {
             None
         }
     }
     for key in key.split(",") {
-        let v = obj.get(key);
-        if v.is_none() {
-            continue;
-        }
-        let v = v.unwrap_or(&Value::Null);
+        let v = match obj.get(key) {
+            Some(v) => v,
+            None => continue,
+        };
         let date = match v {
             Value::Number(n) => human_readable_date_from_int(n.as_i64().unwrap_or_default()),
             Value::String(s) => human_readable_date_from_string(s),
             _ => None,
         };
-        let now = Local::now().time();
+        let now = Local::now();
         let v = match date {
-            Some(d) if d.hour() != now.hour() => format!("{}", d.format("%Y-%m-%d %H:%M:%S.%3f")),
+            Some(d) if d.day() != now.day() || d.month() != now.month() || d.year() != now.year() => format!("{}", d.format("%Y-%m-%d %H:%M:%S.%3f")),
             Some(d) => format!("{}", d.format("%H:%M:%S.%3f")),
-            None => v.to_string(),
+            None => match v {
+                Value::Number(n) => n.to_string(),
+                Value::String(s) => s.to_string(),
+                _ => v.to_string(),
+            },
         };
         return (v.color(Color::BrightBlack), key.to_string());
     }
