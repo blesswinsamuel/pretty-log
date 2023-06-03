@@ -3,12 +3,14 @@ version: 3
 tasks:
   test-stream:rust:
     cmds:
+      # - go run test/test.go | go run .
       - go run test/test.go | cargo run
   test-stream:go:
     cmds:
       - go run test/test.go | go run .
   test:rust:
     cmds:
+      # - go run test/test.go | go run .
       - cat test/logs.txt | cargo run
       - cat test/logs_pino.txt | cargo run
   test:go:
