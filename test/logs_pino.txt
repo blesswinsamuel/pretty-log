@@ -18,3 +18,5 @@
 {"level":30,"time":1624829360872,"pid":2505893,"hostname":"my-pc","msg":"after setImmediate"}
 {"level":60,"time":1624829360872,"pid":2505893,"hostname":"my-pc","msg":"this is at fatal level"}
 {"level":70,"time":1624829360872,"pid":2505893,"hostname":"my-pc","msg":"this is at unknown level"}
+{"level":70,"time":1624829360872,"pid":2505893,"hostname":"my-pc"}
+{}
