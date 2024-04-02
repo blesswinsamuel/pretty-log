@@ -25,7 +25,7 @@ struct Opts {
 }
 
 fn program_log(msg: &str) {
-    eprintln!("{} {}", "<pretty-json-log>".color(Color::BrightBlack), msg)
+    eprintln!("{} {}", "<pretty-log>".color(Color::BrightBlack), msg)
 }
 
 fn main() {

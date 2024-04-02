@@ -1,6 +1,6 @@
-# pretty-json-log
+# pretty-log
 
-pretty-json-log parses JSON logs and shows them in a pretty format with colors easier to read.
+pretty-log parses JSON logs and shows them in a pretty format with colors easier to read.
 
 From this
 
@@ -13,21 +13,21 @@ to
 ## Install
 
 ```
-go get -u github.com/blesswinsamuel/pretty-json-log
+go get -u github.com/blesswinsamuel/pretty-log
 ```
 
 ## Usage
 
 ```
-./your-application | pretty-json-log
+./your-application | pretty-log
 ```
 
-See `pretty-json-log --help` for usage information.
+See `pretty-log --help` for usage information.
 
 ## Development
 
 ```
 go run test/test.go | go run .
 # or
-go install && go run test/test.go | pretty-json-log
+go install && go run test/test.go | pretty-log
 ```
