@@ -82,7 +82,7 @@ func main() {
 	<-stopCh
 	close(quitCh)
 	wg.Wait()
-	fmt.Println(`{"message": "stopped"}`)
+	fmt.Println(`{"message": "received signal, waiting for graceful shutdown"}`)
 	time.Sleep(500 * time.Millisecond)
-	fmt.Println(`{"message": "stopped again"}`)
+	fmt.Println(`{"message": "done cleanup, exiting"}`)
 }

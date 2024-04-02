@@ -1,5 +1,5 @@
 use chrono::prelude::*;
-use clap::{AppSettings, Clap};
+use clap::Parser;
 use colored::{Color, ColoredString, Colorize};
 use serde_json::Map;
 use serde_json::{Result, Value};
@@ -10,18 +10,17 @@ use std::thread;
 
 /// This doc string acts as a help message when the user runs '--help'
 /// as do all doc strings on fields
-#[derive(Clap)]
-#[clap(version = "1.0", author = "Blesswin Samuel")]
-#[clap(setting = AppSettings::ColoredHelp)]
+#[derive(Parser, Debug)]
+#[command(version, about, author = "Blesswin Samuel")]
 struct Opts {
     /// Field that represents time
-    #[clap(short, long, default_value = "time,timestamp")]
+    #[arg(short, long, default_value = "time,timestamp")]
     time_field: String,
     /// Field that represents level
-    #[clap(short, long, default_value = "level,lvl")]
+    #[arg(short, long, default_value = "level,lvl")]
     level_field: String,
     /// Field that represents message
-    #[clap(short, long, default_value = "message,msg")]
+    #[arg(short, long, default_value = "message,msg")]
     message_field: String,
 }
 
@@ -32,15 +31,15 @@ fn program_log(msg: &str) {
 fn main() {
     let opts: Opts = Opts::parse();
     thread::scope(|s| {
+        const SIGNALS: &[c_int] = &[
+            signal_hook::consts::SIGHUP,
+            signal_hook::consts::SIGINT,
+            signal_hook::consts::SIGTERM,
+            signal_hook::consts::SIGQUIT,
+        ];
+        let mut sigs = Signals::new(SIGNALS).unwrap();
+        let sigs_handle = sigs.handle();
         s.spawn(move || {
-            const SIGNALS: &[c_int] = &[
-                signal_hook::consts::SIGHUP,
-                signal_hook::consts::SIGINT,
-                signal_hook::consts::SIGTERM,
-                signal_hook::consts::SIGQUIT,
-            ];
-            let mut sigs = Signals::new(SIGNALS).unwrap();
-
             for signal in &mut sigs {
                 program_log(&format!("Received signal {:?}", signal));
                 // After printing it, do whatever the signal was supposed to do in the first place
@@ -79,6 +78,7 @@ fn main() {
                 println!("{} {} {} {}", time_str, level_str, message_str, fields_str);
             }
             program_log("Stopping");
+            sigs_handle.close();
         });
     });
 }
