@@ -1,27 +1,32 @@
 use chrono::prelude::*;
-use clap::{AppSettings, Clap};
+use clap::Parser;
 use colored::{Color, ColoredString, Colorize};
 use serde_json::Map;
 use serde_json::{Result, Value};
-use signal_hook::iterator::Signals;
+use signal_hook::consts::TERM_SIGNALS;
+use signal_hook::flag;
+use signal_hook::iterator::exfiltrator::WithOrigin;
+use signal_hook::iterator::{Signals, SignalsInfo};
 use std::io::{self, BufRead};
 use std::os::raw::c_int;
+use std::sync::atomic::AtomicBool;
+use std::sync::mpsc::{self, Receiver, Sender};
+use std::sync::Arc;
 use std::thread;
 
 /// This doc string acts as a help message when the user runs '--help'
 /// as do all doc strings on fields
-#[derive(Clap)]
-#[clap(version = "1.0", author = "Blesswin Samuel")]
-#[clap(setting = AppSettings::ColoredHelp)]
+#[derive(Parser, Debug)]
+#[command(version, about, author = "Blesswin Samuel")]
 struct Opts {
     /// Field that represents time
-    #[clap(short, long, default_value = "time,timestamp")]
+    #[arg(short, long, default_value = "time,timestamp")]
     time_field: String,
     /// Field that represents level
-    #[clap(short, long, default_value = "level,lvl")]
+    #[arg(short, long, default_value = "level,lvl")]
     level_field: String,
     /// Field that represents message
-    #[clap(short, long, default_value = "message,msg")]
+    #[arg(short, long, default_value = "message,msg")]
     message_field: String,
 }
 
@@ -29,25 +34,87 @@ fn program_log(msg: &str) {
     eprintln!("{} {}", "<pretty-json-log>".color(Color::BrightBlack), msg)
 }
 
+enum Message {
+    Log(String),
+    Signal(c_int),
+}
+
 fn main() {
     let opts: Opts = Opts::parse();
     thread::scope(|s| {
-        s.spawn(move || {
-            const SIGNALS: &[c_int] = &[
-                signal_hook::consts::SIGHUP,
-                signal_hook::consts::SIGINT,
-                signal_hook::consts::SIGTERM,
-                signal_hook::consts::SIGQUIT,
-            ];
-            let mut sigs = Signals::new(SIGNALS).unwrap();
+        let (tx, rx): (Sender<Message>, Receiver<Message>) = mpsc::channel();
 
-            for signal in &mut sigs {
-                program_log(&format!("Received signal {:?}", signal));
-                // After printing it, do whatever the signal was supposed to do in the first place
-                // low_level::emulate_default_handler(signal).unwrap();
-                break;
+        let tx1 = tx.clone();
+        let term_now = Arc::new(AtomicBool::new(false));
+        for sig in TERM_SIGNALS {
+            // When terminated by a second term signal, exit with exit code 1.
+            // This will do nothing the first time (because term_now is false).
+            flag::register_conditional_shutdown(*sig, 1, Arc::clone(&term_now)).unwrap();
+            // But this will "arm" the above for the second time, by setting it to true.
+            // The order of registering these is important, if you put this one first, it will
+            // first arm and then terminate ‒ all in the first round.
+            flag::register(*sig, Arc::clone(&term_now)).unwrap();
+        }
+
+        // const SIGNALS: &[c_int] = &[
+        //     signal_hook::consts::SIGHUP,
+        //     signal_hook::consts::SIGINT,
+        //     signal_hook::consts::SIGTERM,
+        //     signal_hook::consts::SIGQUIT,
+        // ];
+        // Subscribe to all these signals with information about where they come from. We use the
+        // extra info only for logging in this example (it is not available on all the OSes or at
+        // all the occasions anyway, it may return `Unknown`).
+        let mut sigs: Vec<i32> = vec![
+            signal_hook::consts::SIGUSR1,
+            // // Some terminal handling
+            // SIGTSTP, SIGCONT, SIGWINCH,
+            // // Reload of configuration for daemons ‒ um, is this example for a TUI app or a daemon
+            // // O:-)? You choose...
+            // SIGHUP, // Application-specific action, to print some statistics.
+            // SIGUSR1,
+        ];
+        sigs.extend(TERM_SIGNALS);
+        let mut signals = SignalsInfo::<WithOrigin>::new(&sigs).unwrap();
+        let signals_handle = signals.handle();
+        s.spawn(move || {
+            // let mut has_terminal = true;
+            for info in &mut signals {
+                // Will print info about signal + where it comes from.
+                eprintln!("Received a signal {:?}", info);
+                match info.signal {
+                    signal_hook::consts::SIGUSR1 => break,
+                    // SIGTSTP => {
+                    //     // Restore the terminal to non-TUI mode
+                    //     if has_terminal {
+                    //         app.restore_term();
+                    //         has_terminal = false;
+                    //         // And actually stop ourselves.
+                    //         low_level::emulate_default_handler(SIGTSTP)?;
+                    //     }
+                    // }
+                    // SIGCONT => {
+                    //     if !has_terminal {
+                    //         app.claim_term();
+                    //         has_terminal = true;
+                    //     }
+                    // }
+                    // SIGWINCH => app.resize_term(),
+                    // SIGHUP => app.reload_config(),
+                    // SIGUSR1 => app.print_stats(),
+                    term_sig => {
+                        // These are all the ones left
+                        // program_log(&format!("Received signal {:?}", signal));
+                        tx1.send(Message::Signal(term_sig)).unwrap();
+                        // After printing it, do whatever the signal was supposed to do in the first place
+                        // low_level::emulate_default_handler(signal).unwrap();
+                        break;
+                    }
+                }
             }
+            program_log("Stopping thread 1")
         });
+        let tx2 = tx.clone();
         s.spawn(move || {
             let input = io::stdin();
             for line in input.lock().lines() {
@@ -58,27 +125,43 @@ fn main() {
                         continue;
                     }
                 };
-                let s = match serde_json::from_str(&l) as Result<Value> {
-                    Ok(s) => s,
-                    Err(_) => {
-                        println!("{}", l);
-                        continue;
+                tx2.send(Message::Log(l)).unwrap();
+            }
+            tx2.send(Message::Signal(-1)).unwrap();
+            program_log("Stopping thread 2")
+        });
+        s.spawn(move || {
+            for msg in rx {
+                match msg {
+                    Message::Log(l) => {
+                        let s = match serde_json::from_str(&l) as Result<Value> {
+                            Ok(s) => s,
+                            Err(_) => {
+                                println!("{}", l);
+                                continue;
+                            }
+                        };
+                        let obj = match s.as_object() {
+                            Some(v) => v,
+                            None => {
+                                println!("None");
+                                continue;
+                            }
+                        };
+                        let (time_str, time_key) = get_time(&obj, &opts.time_field);
+                        let (level_str, level_key) = get_level(&obj, &opts.level_field);
+                        let (message_str, message_key) = get_message(&obj, &opts.message_field);
+                        let fields_str = get_fields(&obj, [time_key, level_key, message_key].iter().cloned().collect());
+                        println!("{} {} {} {}", time_str, level_str, message_str, fields_str);
                     }
-                };
-                let obj = match s.as_object() {
-                    Some(v) => v,
-                    None => {
-                        println!("None");
-                        continue;
+                    Message::Signal(signal) => {
+                        program_log(&format!("Received signal {:?}", signal));
+                        break;
                     }
-                };
-                let (time_str, time_key) = get_time(&obj, &opts.time_field);
-                let (level_str, level_key) = get_level(&obj, &opts.level_field);
-                let (message_str, message_key) = get_message(&obj, &opts.message_field);
-                let fields_str = get_fields(&obj, [time_key, level_key, message_key].iter().cloned().collect());
-                println!("{} {} {} {}", time_str, level_str, message_str, fields_str);
+                }
             }
             program_log("Stopping");
+            signals_handle.close();
         });
     });
 }
