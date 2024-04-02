@@ -8,8 +8,7 @@ use std::io::{self, BufRead};
 use std::os::raw::c_int;
 use std::thread;
 
-/// This doc string acts as a help message when the user runs '--help'
-/// as do all doc strings on fields
+/// pretty-log parses JSON logs and shows them in a pretty format with colors easier to read for humans.
 #[derive(Parser, Debug)]
 #[command(version, about, author = "Blesswin Samuel")]
 struct Opts {

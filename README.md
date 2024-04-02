@@ -13,7 +13,7 @@ to
 ## Install
 
 ```
-go get -u github.com/blesswinsamuel/pretty-log
+CARGO_NET_GIT_FETCH_WITH_CLI=true cargo install --git https://github.com/blesswinsamuel/pretty-log --branch main
 ```
 
 ## Usage
@@ -27,7 +27,7 @@ See `pretty-log --help` for usage information.
 ## Development
 
 ```
-go run test/test.go | go run .
+go run test/test.go | cargo run
 # or
-go install && go run test/test.go | pretty-log
+cargo install --path . && go run test/test.go | pretty-log
 ```
