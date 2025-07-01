@@ -28,6 +28,8 @@ fn program_log(msg: &str) {
 }
 
 fn main() {
+    std::env::set_var("CLICOLOR_FORCE", "1");
+
     let opts: Opts = Opts::parse();
     thread::scope(|s| {
         const SIGNALS: &[c_int] = &[

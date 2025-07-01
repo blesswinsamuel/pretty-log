@@ -13,7 +13,7 @@ to
 ## Install
 
 ```
-CARGO_NET_GIT_FETCH_WITH_CLI=true cargo install --git https://github.com/blesswinsamuel/pretty-log --branch main
+cargo install --git https://github.com/blesswinsamuel/pretty-log --branch main
 ```
 
 ## Usage

@@ -7,9 +7,9 @@ edition = "2021"
 
 [dependencies]
 serde_json = "1.0"
-colored = "2"
-clap = { version = "4.5.4", features = ["derive"] }
+colored = "3"
+clap = { version = "4.5.40", features = ["derive"] }
 chrono = "0.4"
-regex = "1.5"
-dateparser = "0.2.0"
-signal-hook = { version = "0.3.15", features = ["extended-siginfo"] }
+regex = "1.11"
+dateparser = "0.2.1"
+signal-hook = { version = "0.3.18", features = ["extended-siginfo"] }
