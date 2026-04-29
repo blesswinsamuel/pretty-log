@@ -138,12 +138,7 @@ fn get_message(obj: &Map<String, Value>, key: &str) -> (ColoredString, String) {
     ("null".color(Color::BrightRed).bold(), String::new())
 }
 
-fn get_fields(
-    obj: &Map<String, Value>,
-    exclude_fields: &HashSet<String>,
-    include_fields: Option<&HashSet<String>>,
-    field_order: &[String],
-) -> String {
+fn get_fields(obj: &Map<String, Value>, exclude_fields: &HashSet<String>, include_fields: Option<&HashSet<String>>, field_order: &[String]) -> String {
     enum RenderedField {
         Inline(String),
         Block(String),
@@ -210,9 +205,9 @@ fn get_fields(
     let mut rendered_keys: HashSet<String> = HashSet::new();
 
     let mut push_field = |k: &str, f: &Value| match get_field(k, f) {
-            RenderedField::Inline(field) => inline_fields.push(field),
-            RenderedField::Block(field) => block_fields.push(field),
-        };
+        RenderedField::Inline(field) => inline_fields.push(field),
+        RenderedField::Block(field) => block_fields.push(field),
+    };
 
     for key in field_order {
         if rendered_keys.contains(key) || !is_visible(key, include_fields, exclude_fields) {
@@ -313,10 +308,7 @@ mod tests {
         });
         let fields = get_fields(
             obj.as_object().unwrap(),
-            &["time".to_string(), "level".to_string(), "message".to_string()]
-                .iter()
-                .cloned()
-                .collect(),
+            &["time".to_string(), "level".to_string(), "message".to_string()].iter().cloned().collect(),
             None,
             &[],
         );

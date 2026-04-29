@@ -86,11 +86,10 @@ fn main() {
     thread::scope(|s| {
         let sigs_handle = sigs.handle();
         s.spawn(move || {
-            for signal in &mut sigs {
+            if let Some(signal) = (&mut sigs).into_iter().next() {
                 program_log(&format!("Received signal {:?}", signal));
                 // After printing it, do whatever the signal was supposed to do in the first place
                 // low_level::emulate_default_handler(signal).unwrap();
-                break;
             }
         });
         s.spawn(move || {
