@@ -137,7 +137,7 @@ fn get_fields(obj: &Map<String, Value>, exclude_fields: HashSet<String>) -> Stri
     fn get_field(k: &str, v: &Value) -> String {
         fn get_field_value(v: &Value) -> String {
             match v {
-                Value::String(s) => format!(r#"\"{}\""#, s).color(Color::BrightBlue).to_string(),
+                Value::String(s) => format!(r#""{}""#, s).color(Color::BrightBlue).to_string(),
                 Value::Number(n) => format!("{}", n).color(Color::BrightCyan).to_string(),
                 Value::Bool(b) => format!("{}", b).color(Color::BrightGreen).to_string(),
                 Value::Object(map) => {
@@ -184,4 +184,78 @@ fn get_fields(obj: &Map<String, Value>, exclude_fields: HashSet<String>) -> Stri
         res.push(get_field(k, f));
     }
     res.join(" ")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn disable_colors() {
+        colored::control::set_override(false);
+    }
+
+    fn test_options() -> FormatOptions {
+        FormatOptions {
+            time_field: "time,timestamp".to_string(),
+            level_field: "level,lvl".to_string(),
+            message_field: "message,msg".to_string(),
+        }
+    }
+
+    #[test]
+    fn format_line_passes_through_plain_text() {
+        disable_colors();
+
+        assert_eq!(format_line("plain text log", &test_options()), "plain text log");
+    }
+
+    #[test]
+    fn format_line_uses_alias_fields() {
+        disable_colors();
+
+        let line = r#"{"timestamp":"2021-04-17T09:45:32.137Z","lvl":"info","msg":"hello","user":"sam"}"#;
+        let formatted = format_line(line, &test_options());
+
+        assert!(formatted.contains("INFO"));
+        assert!(formatted.contains("hello"));
+        assert!(formatted.contains("user=\"sam\""));
+        assert!(!formatted.contains("lvl="));
+        assert!(!formatted.contains("msg="));
+        assert!(!formatted.contains("timestamp="));
+    }
+
+    #[test]
+    fn format_line_normalizes_numeric_levels() {
+        disable_colors();
+
+        let line = r#"{"time":1624829360868,"level":50,"message":"boom"}"#;
+        let formatted = format_line(line, &test_options());
+
+        assert!(formatted.contains("ERROR"));
+        assert!(formatted.contains("boom"));
+    }
+
+    #[test]
+    fn get_fields_skips_excluded_keys() {
+        disable_colors();
+
+        let obj = json!({
+            "time": "2021-04-17T09:45:32.137Z",
+            "level": "info",
+            "message": "hello",
+            "request_id": 42,
+            "ok": true
+        });
+        let fields = get_fields(
+            obj.as_object().unwrap(),
+            ["time".to_string(), "level".to_string(), "message".to_string()]
+                .iter()
+                .cloned()
+                .collect(),
+        );
+
+        assert!(fields.contains("request_id=42"));
+        assert!(fields.contains("ok=true"));
+    }
 }
