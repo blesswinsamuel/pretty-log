@@ -47,7 +47,7 @@ fn formats_pino_fixture() {
     assert!(lines.len() >= include_str!("../test/logs_pino.txt").lines().count());
     assert!(lines[0].contains("INFO hello world"));
     assert!(lines[0].contains("pid=2505893"));
-    assert!(output.contains("stack=\"Error: an error"));
+    assert!(output.contains("stack:\n  Error: an error"));
     assert!(lines.iter().any(|line| line.contains("ERROR an error")));
     assert!(lines.iter().any(|line| line.contains("UNKNOWN (70) this is at unknown level")));
 }

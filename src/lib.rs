@@ -134,7 +134,12 @@ fn get_message(obj: &Map<String, Value>, key: &str) -> (ColoredString, String) {
 }
 
 fn get_fields(obj: &Map<String, Value>, exclude_fields: HashSet<String>) -> String {
-    fn get_field(k: &str, v: &Value) -> String {
+    enum RenderedField {
+        Inline(String),
+        Block(String),
+    }
+
+    fn get_field(k: &str, v: &Value) -> RenderedField {
         fn get_field_value(v: &Value) -> String {
             match v {
                 Value::String(s) => format!(r#""{}""#, s).color(Color::BrightBlue).to_string(),
@@ -173,17 +178,34 @@ fn get_fields(obj: &Map<String, Value>, exclude_fields: HashSet<String>) -> Stri
             }
         }
 
-        format!("{}={}", k.color(Color::BrightBlack), get_field_value(v))
+        if let Value::String(s) = v {
+            if s.contains('\n') {
+                let indented_lines = s.lines().map(|line| format!("  {}", line)).collect::<Vec<String>>().join("\n");
+                return RenderedField::Block(format!("{}:\n{}", k.color(Color::BrightBlack), indented_lines));
+            }
+        }
+
+        RenderedField::Inline(format!("{}={}", k.color(Color::BrightBlack), get_field_value(v)))
     }
 
-    let mut res: Vec<String> = vec![];
+    let mut inline_fields: Vec<String> = vec![];
+    let mut block_fields: Vec<String> = vec![];
     for (k, f) in obj {
         if exclude_fields.contains(k) {
             continue;
         }
-        res.push(get_field(k, f));
+        match get_field(k, f) {
+            RenderedField::Inline(field) => inline_fields.push(field),
+            RenderedField::Block(field) => block_fields.push(field),
+        }
     }
-    res.join(" ")
+
+    match (inline_fields.is_empty(), block_fields.is_empty()) {
+        (true, true) => String::new(),
+        (false, true) => inline_fields.join(" "),
+        (true, false) => block_fields.join("\n"),
+        (false, false) => format!("{}\n{}", inline_fields.join(" "), block_fields.join("\n")),
+    }
 }
 
 #[cfg(test)]
@@ -264,5 +286,16 @@ mod tests {
 
         assert!(fields.contains("request_id=42"));
         assert!(fields.contains("ok=true"));
+    }
+
+    #[test]
+    fn format_line_renders_multiline_fields_as_blocks() {
+        disable_colors();
+
+        let line = r#"{"time":1624829360868,"level":50,"message":"boom","type":"Error","stack":"Error: boom\n    at main"}"#;
+        let formatted = format_line(line, &test_options());
+
+        assert!(formatted.contains("ERROR boom type=\"Error\""));
+        assert!(formatted.contains("\nstack:\n  Error: boom\n      at main"));
     }
 }
