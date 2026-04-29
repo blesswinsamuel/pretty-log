@@ -6,6 +6,15 @@ use std::io::{self, BufRead};
 use std::os::raw::c_int;
 use std::thread;
 
+fn parse_field_list(value: &str) -> Vec<String> {
+    value
+        .split(',')
+        .map(str::trim)
+        .filter(|field| !field.is_empty())
+        .map(ToOwned::to_owned)
+        .collect()
+}
+
 /// pretty-log parses JSON logs and shows them in a pretty format with colors easier to read for humans.
 #[derive(Parser, Debug)]
 #[command(version, about, author = "Blesswin Samuel")]
@@ -19,6 +28,15 @@ struct Opts {
     /// Field that represents message
     #[arg(short, long, default_value = "message,msg")]
     message_field: String,
+    /// Comma-separated non-core fields to include in the output
+    #[arg(long, default_value = "")]
+    include_fields: String,
+    /// Comma-separated non-core fields to hide from the output
+    #[arg(long, default_value = "")]
+    exclude_fields: String,
+    /// Comma-separated preferred order for non-core fields
+    #[arg(long, default_value = "")]
+    field_order: String,
     /// When to use colorized output
     #[arg(long, value_enum, default_value_t = ColorMode::Auto)]
     color: ColorMode,
@@ -42,10 +60,14 @@ fn main() {
         ColorMode::Always => colored::control::set_override(true),
         ColorMode::Never => colored::control::set_override(false),
     }
+    let include_fields = parse_field_list(&opts.include_fields);
     let format_opts = FormatOptions {
         time_field: opts.time_field.clone(),
         level_field: opts.level_field.clone(),
         message_field: opts.message_field.clone(),
+        include_fields: (!include_fields.is_empty()).then(|| include_fields.iter().cloned().collect()),
+        exclude_fields: parse_field_list(&opts.exclude_fields).into_iter().collect(),
+        field_order: parse_field_list(&opts.field_order),
     };
     const SIGNALS: &[c_int] = &[
         signal_hook::consts::SIGHUP,

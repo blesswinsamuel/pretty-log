@@ -9,6 +9,9 @@ pub struct FormatOptions {
     pub time_field: String,
     pub level_field: String,
     pub message_field: String,
+    pub include_fields: Option<HashSet<String>>,
+    pub exclude_fields: HashSet<String>,
+    pub field_order: Vec<String>,
 }
 
 pub fn format_line(line: &str, opts: &FormatOptions) -> String {
@@ -25,7 +28,9 @@ pub fn format_line(line: &str, opts: &FormatOptions) -> String {
     let (time_str, time_key) = get_time(obj, &opts.time_field);
     let (level_str, level_key) = get_level(obj, &opts.level_field);
     let (message_str, message_key) = get_message(obj, &opts.message_field);
-    let fields_str = get_fields(obj, [time_key, level_key, message_key].iter().cloned().collect());
+    let mut excluded_fields: HashSet<String> = [time_key, level_key, message_key].iter().cloned().collect();
+    excluded_fields.extend(opts.exclude_fields.iter().cloned());
+    let fields_str = get_fields(obj, &excluded_fields, opts.include_fields.as_ref(), &opts.field_order);
 
     format!("{} {} {} {}", time_str, level_str, message_str, fields_str)
 }
@@ -133,7 +138,12 @@ fn get_message(obj: &Map<String, Value>, key: &str) -> (ColoredString, String) {
     ("null".color(Color::BrightRed).bold(), String::new())
 }
 
-fn get_fields(obj: &Map<String, Value>, exclude_fields: HashSet<String>) -> String {
+fn get_fields(
+    obj: &Map<String, Value>,
+    exclude_fields: &HashSet<String>,
+    include_fields: Option<&HashSet<String>>,
+    field_order: &[String],
+) -> String {
     enum RenderedField {
         Inline(String),
         Block(String),
@@ -188,16 +198,38 @@ fn get_fields(obj: &Map<String, Value>, exclude_fields: HashSet<String>) -> Stri
         RenderedField::Inline(format!("{}={}", k.color(Color::BrightBlack), get_field_value(v)))
     }
 
+    fn is_visible(k: &str, include_fields: Option<&HashSet<String>>, exclude_fields: &HashSet<String>) -> bool {
+        if exclude_fields.contains(k) {
+            return false;
+        }
+        include_fields.map(|fields| fields.contains(k)).unwrap_or(true)
+    }
+
     let mut inline_fields: Vec<String> = vec![];
     let mut block_fields: Vec<String> = vec![];
-    for (k, f) in obj {
-        if exclude_fields.contains(k) {
-            continue;
-        }
-        match get_field(k, f) {
+    let mut rendered_keys: HashSet<String> = HashSet::new();
+
+    let mut push_field = |k: &str, f: &Value| match get_field(k, f) {
             RenderedField::Inline(field) => inline_fields.push(field),
             RenderedField::Block(field) => block_fields.push(field),
+        };
+
+    for key in field_order {
+        if rendered_keys.contains(key) || !is_visible(key, include_fields, exclude_fields) {
+            continue;
         }
+        if let Some(value) = obj.get(key) {
+            push_field(key, value);
+            rendered_keys.insert(key.clone());
+        }
+    }
+
+    for (k, f) in obj {
+        if rendered_keys.contains(k) || !is_visible(k, include_fields, exclude_fields) {
+            continue;
+        }
+        push_field(k, f);
+        rendered_keys.insert(k.clone());
     }
 
     match (inline_fields.is_empty(), block_fields.is_empty()) {
@@ -222,6 +254,9 @@ mod tests {
             time_field: "time,timestamp".to_string(),
             level_field: "level,lvl".to_string(),
             message_field: "message,msg".to_string(),
+            include_fields: None,
+            exclude_fields: HashSet::new(),
+            field_order: Vec::new(),
         }
     }
 
@@ -278,10 +313,12 @@ mod tests {
         });
         let fields = get_fields(
             obj.as_object().unwrap(),
-            ["time".to_string(), "level".to_string(), "message".to_string()]
+            &["time".to_string(), "level".to_string(), "message".to_string()]
                 .iter()
                 .cloned()
                 .collect(),
+            None,
+            &[],
         );
 
         assert!(fields.contains("request_id=42"));
@@ -297,5 +334,22 @@ mod tests {
 
         assert!(formatted.contains("ERROR boom type=\"Error\""));
         assert!(formatted.contains("\nstack:\n  Error: boom\n      at main"));
+    }
+
+    #[test]
+    fn format_line_applies_field_filters_and_ordering() {
+        disable_colors();
+
+        let mut opts = test_options();
+        opts.include_fields = Some(["request_id".to_string(), "service".to_string()].iter().cloned().collect());
+        opts.exclude_fields = ["service".to_string()].iter().cloned().collect();
+        opts.field_order = vec!["service".to_string(), "request_id".to_string()];
+
+        let line = r#"{"time":1624829360868,"level":30,"message":"hello","hostname":"box","request_id":42,"service":"api"}"#;
+        let formatted = format_line(line, &opts);
+
+        assert!(formatted.contains("INFO hello request_id=42"));
+        assert!(!formatted.contains("hostname="));
+        assert!(!formatted.contains("service="));
     }
 }
