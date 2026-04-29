@@ -13,7 +13,7 @@ to
 ## Install
 
 ```
-cargo install --git https://github.com/blesswinsamuel/pretty-log --branch main
+cargo install --git https://github.com/blesswinsamuel/pretty-json-log --branch main
 ```
 
 ## Usage
