@@ -47,14 +47,21 @@ fn main() {
         level_field: opts.level_field.clone(),
         message_field: opts.message_field.clone(),
     };
+    const SIGNALS: &[c_int] = &[
+        signal_hook::consts::SIGHUP,
+        signal_hook::consts::SIGINT,
+        signal_hook::consts::SIGTERM,
+        signal_hook::consts::SIGQUIT,
+    ];
+    let mut sigs = match Signals::new(SIGNALS) {
+        Ok(sigs) => sigs,
+        Err(err) => {
+            program_log(&format!("Failed to install signal handlers: {:?}", err));
+            std::process::exit(1);
+        }
+    };
+
     thread::scope(|s| {
-        const SIGNALS: &[c_int] = &[
-            signal_hook::consts::SIGHUP,
-            signal_hook::consts::SIGINT,
-            signal_hook::consts::SIGTERM,
-            signal_hook::consts::SIGQUIT,
-        ];
-        let mut sigs = Signals::new(SIGNALS).unwrap();
         let sigs_handle = sigs.handle();
         s.spawn(move || {
             for signal in &mut sigs {

@@ -19,7 +19,7 @@ pub fn format_line(line: &str, opts: &FormatOptions) -> String {
 
     let obj = match parsed.as_object() {
         Some(obj) => obj,
-        None => return "None".to_string(),
+        None => return line.to_string(),
     };
 
     let (time_str, time_key) = get_time(obj, &opts.time_field);
@@ -208,6 +208,13 @@ mod tests {
         disable_colors();
 
         assert_eq!(format_line("plain text log", &test_options()), "plain text log");
+    }
+
+    #[test]
+    fn format_line_passes_through_non_object_json() {
+        disable_colors();
+
+        assert_eq!(format_line("[1,true,\"hello\"]", &test_options()), "[1,true,\"hello\"]");
     }
 
     #[test]
