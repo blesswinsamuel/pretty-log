@@ -1,4 +1,4 @@
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 use colored::{Color, Colorize};
 use pretty_log::{format_line, FormatOptions};
 use signal_hook::iterator::Signals;
@@ -19,6 +19,16 @@ struct Opts {
     /// Field that represents message
     #[arg(short, long, default_value = "message,msg")]
     message_field: String,
+    /// When to use colorized output
+    #[arg(long, value_enum, default_value_t = ColorMode::Auto)]
+    color: ColorMode,
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq, ValueEnum)]
+enum ColorMode {
+    Auto,
+    Always,
+    Never,
 }
 
 fn program_log(msg: &str) {
@@ -26,9 +36,12 @@ fn program_log(msg: &str) {
 }
 
 fn main() {
-    std::env::set_var("CLICOLOR_FORCE", "1");
-
     let opts: Opts = Opts::parse();
+    match opts.color {
+        ColorMode::Auto => colored::control::unset_override(),
+        ColorMode::Always => colored::control::set_override(true),
+        ColorMode::Never => colored::control::set_override(false),
+    }
     let format_opts = FormatOptions {
         time_field: opts.time_field.clone(),
         level_field: opts.level_field.clone(),
