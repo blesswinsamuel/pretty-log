@@ -8,11 +8,11 @@ It is designed to work well with mixed streams where some lines are JSON and som
 
 Before:
 
-![Before screenshot](https://user-images.githubusercontent.com/815723/123560482-01debf80-d7c0-11eb-857a-0f6f830f8822.png)
+<img width="1228" height="719" alt="image" src="https://github.com/user-attachments/assets/8ebd0c03-348d-4667-a771-2219dfd436df" />
 
 After:
 
-![After screenshot](https://user-images.githubusercontent.com/815723/123560502-33f02180-d7c0-11eb-8ba4-dbd50e9ed3d0.png)
+<img width="1228" height="870" alt="image" src="https://github.com/user-attachments/assets/b4126194-beb0-4e61-a74f-44bbe6f339d5" />
 
 ## Features
 
