@@ -1,7 +1,7 @@
-{"level":"trace","time":"2021-04-17T09:45:32.137Z","req":{"id":8127,"method":"POST","url":"/graphql"},"res":{"statusCode":200},"responseTime":9,"msg":"request completed"}
-{"level":"debug","time":"2021-04-17T09:45:40.243Z","req":{"id":8128,"method":"POST","url":"/graphql"},"res":{"statusCode":200},"responseTime":6,"msg":"request completed"}
-{"level":"info","time":"2021-04-17T09:45:40.360Z","req":{"id":8129,"method":"POST","url":"/graphql"},"res":{"statusCode":200},"responseTime":20,"msg":"request completed"}
-{"level":"warn","time":"2021-04-17T09:45:45.008Z","req":{"id":8131,"method":"POST","url":"/graphql"},"res":{"statusCode":200},"responseTime":17,"msg":"request completed"}
-{"level":"error","time":"2021-04-17T09:45:48.193Z","req":{"id":8132,"method":"POST","url":"/graphql"},"res":{"statusCode":200},"responseTime":449,"msg":"request completed"}
-{"level":"fatal","time":"2021-04-17T09:46:10.749Z","req":{"id":8133,"method":"POST","url":"/graphql"},"res":{"statusCode":200},"responseTime":14,"msg":"request completed"}
-{"level":"panic","time":"2021-04-17T09:46:45.889Z","req":{"id":8137,"method":"POST","url":"/graphql"},"res":{"statusCode":200},"responseTime":19,"msg":"request completed"}
+{"level":"trace","time":"2026-04-30T09:45:32.137Z","service":"api-gateway","env":"staging","req":{"id":"req-8127","method":"POST","url":"/graphql"},"res":{"statusCode":200,"bytes":1184},"responseTime":9,"msg":"request completed"}
+{"level":"debug","time":"2026-04-30T09:45:40.243Z","service":"api-gateway","env":"staging","req":{"id":"req-8128","method":"GET","url":"/healthz"},"res":{"statusCode":200,"bytes":128},"responseTime":6,"msg":"health check completed"}
+{"level":"info","time":"2026-04-30T09:45:40.360Z","service":"api-gateway","env":"staging","req":{"id":"req-8129","method":"POST","url":"/graphql"},"res":{"statusCode":200,"bytes":1440},"responseTime":20,"user":{"id":"u-204","role":"admin"},"msg":"request completed"}
+{"level":"warn","time":"2026-04-30T09:45:45.008Z","service":"api-gateway","env":"staging","req":{"id":"req-8131","method":"POST","url":"/graphql"},"res":{"statusCode":429,"bytes":214},"responseTime":17,"retryAfterMs":250,"msg":"rate limit exceeded"}
+{"level":"error","time":"2026-04-30T09:45:48.193Z","service":"api-gateway","env":"staging","req":{"id":"req-8132","method":"POST","url":"/graphql"},"res":{"statusCode":500,"bytes":392},"responseTime":449,"error":{"code":"DB_TIMEOUT","attempt":3},"msg":"request failed"}
+{"level":"fatal","time":"2026-04-30T09:46:10.749Z","service":"api-gateway","env":"staging","req":{"id":"req-8133","method":"POST","url":"/graphql"},"res":{"statusCode":503,"bytes":221},"responseTime":14,"msg":"circuit breaker open"}
+{"level":"panic","time":"2026-04-30T09:46:45.889Z","service":"api-gateway","env":"staging","req":{"id":"req-8137","method":"POST","url":"/graphql"},"res":{"statusCode":500,"bytes":203},"responseTime":19,"msg":"panic recovered in request handler"}

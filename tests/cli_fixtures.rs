@@ -35,8 +35,9 @@ fn formats_sample_log_fixture() {
 
     assert_eq!(lines.len(), include_str!("../test/logs.txt").lines().count());
     assert!(lines[0].contains("TRACE request completed"));
-    assert!(lines[0].contains("req={id:8127, method:\"POST\", url:\"/graphql\"}"));
-    assert!(lines[4].contains("ERROR request completed"));
+    assert!(lines[0].contains("service=\"api-gateway\""));
+    assert!(lines[0].contains("req={id:\"req-8127\", method:\"POST\", url:\"/graphql\"}"));
+    assert!(lines[4].contains("ERROR request failed"));
 }
 
 #[test]
@@ -45,9 +46,9 @@ fn formats_pino_fixture() {
     let lines: Vec<&str> = output.lines().collect();
 
     assert!(lines.len() >= include_str!("../test/logs_pino.txt").lines().count());
-    assert!(lines[0].contains("INFO hello world"));
-    assert!(lines[0].contains("pid=2505893"));
-    assert!(output.contains("stack:\n  Error: an error"));
-    assert!(lines.iter().any(|line| line.contains("ERROR an error")));
+    assert!(lines[0].contains("INFO worker started"));
+    assert!(lines[0].contains("service=\"billing-worker\""));
+    assert!(output.contains("stack:\n  Error: failed to charge invoice"));
+    assert!(lines.iter().any(|line| line.contains("ERROR charge failed")));
     assert!(lines.iter().any(|line| line.contains("UNKNOWN (70) this is at unknown level")));
 }
