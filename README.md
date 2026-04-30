@@ -4,6 +4,16 @@ pretty-log is a command-line utility that turns newline-delimited JSON logs into
 
 It is designed to work well with mixed streams where some lines are JSON and some are plain text.
 
+## Quick Preview
+
+Before:
+
+![Before screenshot](https://user-images.githubusercontent.com/815723/123560482-01debf80-d7c0-11eb-857a-0f6f830f8822.png)
+
+After:
+
+![After screenshot](https://user-images.githubusercontent.com/815723/123560502-33f02180-d7c0-11eb-8ba4-dbd50e9ed3d0.png)
+
 ## Features
 
 - Human-friendly formatting for structured JSON logs
