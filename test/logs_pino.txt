@@ -1,22 +1,15 @@
-{"level":30,"time":1624829360868,"pid":2505893,"hostname":"dev-mbp","service":"billing-worker","msg":"worker started"}
-{"level":50,"time":1624829360869,"pid":2505893,"hostname":"my-pc","msg":"this is at error level"}
-{"level":40,"time":1624829360869,"pid":2505893,"hostname":"my-pc","msg":"this is at warn level"}
-{"level":30,"time":1624829360869,"pid":2505893,"hostname":"my-pc","msg":"the answer is 42"}
-{"level":30,"time":1624829360869,"pid":2505893,"hostname":"my-pc","obj":42,"msg":"hello world","c":false}
-{"level":30,"time":1624829360869,"pid":2505893,"hostname":"my-pc","obj":42,"b":2,"msg":"hello world","c":true}
-{"level":30,"time":1624829360869,"pid":2505893,"hostname":"my-pc","nested":{"obj":42},"msg":"nested","arr":[1,true,"str",{"foo":"bar"}]}
-{"level":50,"time":1624829360870,"pid":2505893,"hostname":"dev-mbp","service":"billing-worker","stack":"Error: failed to charge invoice\n    at Object.<anonymous> (/tmp/pinolog/index.js:12:12)\n    at Module._compile (node:internal/modules/cjs/loader:1092:14)\n    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1121:10)\n    at Module.load (node:internal/modules/cjs/loader:972:32)\n    at Function.Module._load (node:internal/modules/cjs/loader:813:14)\n    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:76:12)\n    at node:internal/main/run_main_module:17:47","type":"Error","invoiceId":"inv_9981","msg":"charge failed"}
-{"level":30,"time":1624829360870,"pid":2505893,"hostname":"my-pc","a":"property","msg":"hello child!"}
-{"level":30,"time":1624829360870,"pid":2505893,"hostname":"my-pc","a":"property","another":"property","msg":"hello baby.."}
-{"level":20,"time":1624829360871,"pid":2505893,"hostname":"my-pc","msg":"this is a debug statement"}
-{"level":20,"time":1624829360871,"pid":2505893,"hostname":"my-pc","another":"property","msg":"this is a debug statement via child"}
-{"level":10,"time":1624829360871,"pid":2505893,"hostname":"my-pc","msg":"this is a trace statement"}
-{"level":20,"time":1624829360871,"pid":2505893,"hostname":"my-pc","msg":"this is a \"debug\" statement with \""}
-{"level":30,"time":1624829360871,"pid":2505893,"hostname":"my-pc","stack":"Error: kaboom\n    at Object.<anonymous> (/tmp/pinolog/index.js:31:11)\n    at Module._compile (node:internal/modules/cjs/loader:1092:14)\n    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1121:10)\n    at Module.load (node:internal/modules/cjs/loader:972:32)\n    at Function.Module._load (node:internal/modules/cjs/loader:813:14)\n    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:76:12)\n    at node:internal/main/run_main_module:17:47","type":"Error","msg":"kaboom"}
-{"level":30,"time":1624829360871,"pid":2505893,"hostname":"my-pc","msg":null}
-{"level":30,"time":1624829360871,"pid":2505893,"hostname":"my-pc","stack":"Error: kaboom\n    at Object.<anonymous> (/tmp/pinolog/index.js:34:11)\n    at Module._compile (node:internal/modules/cjs/loader:1092:14)\n    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1121:10)\n    at Module.load (node:internal/modules/cjs/loader:972:32)\n    at Function.Module._load (node:internal/modules/cjs/loader:813:14)\n    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:76:12)\n    at node:internal/main/run_main_module:17:47","type":"Error","msg":"with"}
-{"level":30,"time":1624829360872,"pid":2505893,"hostname":"my-pc","msg":"after setImmediate"}
-{"level":60,"time":1624829360872,"pid":2505893,"hostname":"my-pc","msg":"this is at fatal level"}
-{"level":70,"time":1624829360872,"pid":2505893,"hostname":"my-pc","msg":"this is at unknown level"}
-{"level":70,"time":1624829360872,"pid":2505893,"hostname":"my-pc"}
+{"level":30,"time":1624829360868,"pid":2505893,"hostname":"dev-mbp","service":"billing-worker","env":"staging","msg":"worker started"}
+{"level":20,"time":1624829360869,"pid":2505893,"hostname":"dev-mbp","service":"billing-worker","queue":"invoice-charges","msg":"polling queue"}
+{"level":10,"time":1624829360869,"pid":2505893,"hostname":"dev-mbp","service":"billing-worker","jobId":"job_1842","invoiceId":"inv_9981","attempt":1,"msg":"job reserved"}
+{"level":30,"time":1624829360869,"pid":2505893,"hostname":"dev-mbp","service":"billing-worker","jobId":"job_1842","invoiceId":"inv_9981","amount":1299,"currency":"USD","msg":"starting charge"}
+{"level":40,"time":1624829360870,"pid":2505893,"hostname":"dev-mbp","service":"billing-worker","jobId":"job_1842","provider":"stripe","retryInMs":5000,"msg":"provider latency detected"}
+{"level":50,"time":1624829360870,"pid":2505893,"hostname":"dev-mbp","service":"billing-worker","jobId":"job_1842","invoiceId":"inv_9981","provider":"stripe","errorCode":"CARD_NETWORK_TIMEOUT","stack":"Error: failed to charge invoice\n    at Object.<anonymous> (/tmp/pinolog/index.js:12:12)\n    at Module._compile (node:internal/modules/cjs/loader:1092:14)\n    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1121:10)\n    at Module.load (node:internal/modules/cjs/loader:972:32)\n    at Function.Module._load (node:internal/modules/cjs/loader:813:14)\n    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:76:12)\n    at node:internal/main/run_main_module:17:47","type":"Error","msg":"charge failed"}
+{"level":30,"time":1624829360870,"pid":2505893,"hostname":"dev-mbp","service":"billing-worker","jobId":"job_1842","status":"retry_scheduled","nextAttemptAt":"2021-06-28T02:59:25.870Z","msg":"retry scheduled"}
+{"level":20,"time":1624829360871,"pid":2505893,"hostname":"dev-mbp","service":"billing-worker","metrics":{"processed":1024,"failed":3,"retried":27},"msg":"worker metrics snapshot"}
+{"level":30,"time":1624829360871,"pid":2505893,"hostname":"dev-mbp","service":"billing-worker","nested":{"batch":"2021-06-28T02:59","stats":{"ok":97,"failed":3}},"arr":[1,true,"str",{"foo":"bar"}],"msg":"batch summary"}
+{"level":30,"time":1624829360871,"pid":2505893,"hostname":"dev-mbp","service":"billing-worker","msg":null}
+{"level":30,"time":1624829360871,"pid":2505893,"hostname":"dev-mbp","service":"billing-worker","stack":"Error: webhook callback timeout\n    at Object.<anonymous> (/tmp/pinolog/index.js:34:11)\n    at Module._compile (node:internal/modules/cjs/loader:1092:14)\n    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1121:10)\n    at Module.load (node:internal/modules/cjs/loader:972:32)\n    at Function.Module._load (node:internal/modules/cjs/loader:813:14)\n    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:76:12)\n    at node:internal/main/run_main_module:17:47","type":"Error","msg":"webhook timed out"}
+{"level":60,"time":1624829360872,"pid":2505893,"hostname":"dev-mbp","service":"billing-worker","reason":"queue_unavailable","msg":"worker entering safe-stop mode"}
+{"level":70,"time":1624829360872,"pid":2505893,"hostname":"dev-mbp","service":"billing-worker","msg":"this is at unknown level"}
+{"level":70,"time":1624829360872,"pid":2505893,"hostname":"dev-mbp","service":"billing-worker"}
 {}
