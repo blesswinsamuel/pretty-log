@@ -83,6 +83,7 @@ fn run_pretty_log_bytes(input: &[u8]) -> Vec<u8> {
 
     let output = child.wait_with_output().expect("wait for pretty-log");
     assert!(output.status.success(), "binary should exit successfully");
+    assert!(output.stderr.is_empty(), "unexpected stderr: {:?}", String::from_utf8_lossy(&output.stderr));
 
     output.stdout
 }

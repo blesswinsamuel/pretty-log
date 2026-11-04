@@ -97,5 +97,4 @@ fn main() {
             break;
         }
     }
-    program_log("Stopping");
 }
