@@ -25,14 +25,26 @@ pub fn format_line(line: &str, opts: &FormatOptions) -> String {
         None => return line.to_string(),
     };
 
+    if obj.is_empty() {
+        // An object with no fields renders nothing, so keep the original line instead.
+        return line.to_string();
+    }
+
     let (time_str, time_key) = get_time(obj, &opts.time_field);
-    let (level_str, level_key) = get_level(obj, &opts.level_field);
+    // Only pad the level when a time column precedes it, so a line without a time starts flush left.
+    let (level_str, level_key) = get_level(obj, &opts.level_field, !time_str.is_empty());
     let (message_str, message_key) = get_message(obj, &opts.message_field);
     let mut excluded_fields: HashSet<String> = [time_key, level_key, message_key].iter().cloned().collect();
     excluded_fields.extend(opts.exclude_fields.iter().cloned());
     let fields_str = get_fields(obj, &excluded_fields, opts.include_fields.as_ref(), &opts.field_order);
 
-    format!("{} {} {} {}", time_str, level_str, message_str, fields_str)
+    [time_str, level_str, message_str]
+        .into_iter()
+        .map(|part| part.to_string())
+        .chain(std::iter::once(fields_str))
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<String>>()
+        .join(" ")
 }
 
 fn get_time(obj: &Map<String, Value>, key: &str) -> (ColoredString, String) {
@@ -75,10 +87,10 @@ fn get_time(obj: &Map<String, Value>, key: &str) -> (ColoredString, String) {
         return (v.color(Color::BrightBlack), key.to_string());
     }
 
-    ("EMPTY TIME".color(Color::BrightBlack), String::new())
+    (ColoredString::default(), String::new())
 }
 
-fn get_level(obj: &Map<String, Value>, key: &str) -> (ColoredString, String) {
+fn get_level(obj: &Map<String, Value>, key: &str, pad: bool) -> (ColoredString, String) {
     fn normalize_int_log_level(v: u64) -> String {
         match v {
             10 => "trace".to_string(),
@@ -91,8 +103,8 @@ fn get_level(obj: &Map<String, Value>, key: &str) -> (ColoredString, String) {
         }
     }
 
-    fn colorize_log_level(v: String) -> ColoredString {
-        let pad_level = |s: String| format!("{:>5}", s);
+    fn colorize_log_level(v: String, pad: bool) -> ColoredString {
+        let pad_level = |s: String| if pad { format!("{:>5}", s) } else { s };
         match v.as_str() {
             "PANIC" => pad_level(v).color(Color::Red).on_color(Color::BrightWhite).bold(),
             "FATAL" => pad_level(v).color(Color::BrightWhite).on_color(Color::Red).bold(),
@@ -115,10 +127,10 @@ fn get_level(obj: &Map<String, Value>, key: &str) -> (ColoredString, String) {
             Value::String(s) => s.clone(),
             _ => format!("invalid ({})", v),
         };
-        return (colorize_log_level(normalized_level.to_uppercase()), key.to_string());
+        return (colorize_log_level(normalized_level.to_uppercase(), pad), key.to_string());
     }
 
-    ("EMPTY".color(Color::BrightBlack).on_color(Color::BrightYellow).bold(), String::new())
+    (ColoredString::default(), String::new())
 }
 
 fn get_message(obj: &Map<String, Value>, key: &str) -> (ColoredString, String) {
@@ -135,7 +147,7 @@ fn get_message(obj: &Map<String, Value>, key: &str) -> (ColoredString, String) {
         return (v, key.to_string());
     }
 
-    ("null".color(Color::BrightRed).bold(), String::new())
+    (ColoredString::default(), String::new())
 }
 
 fn get_fields(obj: &Map<String, Value>, exclude_fields: &HashSet<String>, include_fields: Option<&HashSet<String>>, field_order: &[String]) -> String {
@@ -326,6 +338,58 @@ mod tests {
 
         assert!(formatted.contains("ERROR boom type=\"Error\""));
         assert!(formatted.contains("\nstack:\n  Error: boom\n      at main"));
+    }
+
+    #[test]
+    fn format_line_omits_absent_core_fields() {
+        disable_colors();
+
+        let line = r#"{"message":"hello","request_id":42}"#;
+        let formatted = format_line(line, &test_options());
+
+        assert_eq!(formatted, "hello request_id=42");
+    }
+
+    #[test]
+    fn format_line_renders_missing_message_as_blank() {
+        disable_colors();
+
+        let line = r#"{"time":1624829360868,"level":30,"host":"box"}"#;
+        let formatted = format_line(line, &test_options());
+
+        assert!(formatted.ends_with("INFO host=\"box\""), "{formatted:?}");
+        assert!(!formatted.contains("null"), "{formatted:?}");
+    }
+
+    #[test]
+    fn format_line_does_not_pad_level_without_time() {
+        disable_colors();
+
+        let line = r#"{"level":30,"message":"hello"}"#;
+        assert_eq!(format_line(line, &test_options()), "INFO hello");
+    }
+
+    #[test]
+    fn format_line_passes_through_empty_object() {
+        disable_colors();
+
+        assert_eq!(format_line("{}", &test_options()), "{}");
+    }
+
+    #[test]
+    fn format_line_does_not_emit_trailing_whitespace() {
+        disable_colors();
+
+        for line in [
+            r#"{"time":1624829360868,"level":30}"#,
+            r#"{"time":1624829360868,"level":30,"message":""}"#,
+            r#"{"time":1624829360868,"level":30,"message":"hi"}"#,
+            r#"{"message":"hi","type":"Error","stack":"a\nb"}"#,
+            "{}",
+        ] {
+            let formatted = format_line(line, &test_options());
+            assert_eq!(formatted.trim_end(), formatted, "trailing whitespace in {formatted:?}");
+        }
     }
 
     #[test]
