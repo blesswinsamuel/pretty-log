@@ -71,7 +71,7 @@ fn terminates_on_sigint() {
     assert_eq!(status.signal(), Some(2), "pretty-log should terminate on SIGINT, got {status:?}");
 }
 
-fn run_pretty_log(input: &str) -> String {
+fn run_pretty_log_bytes(input: &[u8]) -> Vec<u8> {
     let mut child = Command::new(env!("CARGO_BIN_EXE_pretty-log"))
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -79,17 +79,32 @@ fn run_pretty_log(input: &str) -> String {
         .spawn()
         .expect("spawn pretty-log binary");
 
-    child
-        .stdin
-        .as_mut()
-        .expect("stdin handle")
-        .write_all(input.as_bytes())
-        .expect("write fixture input");
+    child.stdin.as_mut().expect("stdin handle").write_all(input).expect("write fixture input");
 
     let output = child.wait_with_output().expect("wait for pretty-log");
     assert!(output.status.success(), "binary should exit successfully");
 
-    strip_ansi(&String::from_utf8(output.stdout).expect("utf8 stdout"))
+    output.stdout
+}
+
+fn run_pretty_log(input: &str) -> String {
+    strip_ansi(&String::from_utf8(run_pretty_log_bytes(input.as_bytes())).expect("utf8 stdout"))
+}
+
+#[test]
+fn passes_through_lines_that_are_not_valid_utf8() {
+    let mut input = Vec::new();
+    input.extend_from_slice(b"{\"time\":1624829360868,\"level\":30,\"message\":\"before\"}\n");
+    input.extend_from_slice(b"plain \xff\xfe text\n");
+    input.extend_from_slice(b"{\"time\":1624829360868,\"level\":30,\"message\":\"after\"}\n");
+
+    let output = String::from_utf8(run_pretty_log_bytes(&input)).expect("utf8 stdout");
+    let lines: Vec<&str> = output.lines().collect();
+
+    assert_eq!(lines.len(), 3);
+    assert!(lines[0].contains("before"));
+    assert_eq!(lines[1], "plain \u{FFFD}\u{FFFD} text");
+    assert!(lines[2].contains("after"));
 }
 
 #[test]

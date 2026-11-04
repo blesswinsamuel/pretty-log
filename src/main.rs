@@ -68,15 +68,27 @@ fn main() {
     };
 
     let input = io::stdin();
+    let mut input = input.lock();
     let mut output = io::stdout().lock();
-    for line in input.lock().lines() {
-        let line = match line {
-            Ok(l) => l,
+    let mut buf = Vec::new();
+    loop {
+        buf.clear();
+        // Read raw bytes so lines that are not valid UTF-8 still reach the output.
+        match input.read_until(b'\n', &mut buf) {
+            Ok(0) => break,
+            Ok(_) => {}
             Err(err) => {
                 program_log(&format!("Error: {:?}", err));
-                continue;
+                break;
             }
-        };
+        }
+        if buf.last() == Some(&b'\n') {
+            buf.pop();
+            if buf.last() == Some(&b'\r') {
+                buf.pop();
+            }
+        }
+        let line = String::from_utf8_lossy(&buf);
         if let Err(err) = writeln!(output, "{}", format_line(&line, &format_opts)) {
             // Stop reading once stdout is gone instead of panicking on the write error.
             if err.kind() != io::ErrorKind::BrokenPipe {
