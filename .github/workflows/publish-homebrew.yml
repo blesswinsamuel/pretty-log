@@ -1,0 +1,44 @@
+name: Publish Homebrew Formula
+
+on:
+  workflow_call:
+    inputs:
+      plan:
+        required: true
+        type: string
+
+jobs:
+  publish:
+    if: ${{ !fromJson(inputs.plan).announcement_is_prerelease }}
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout tap
+        uses: actions/checkout@v6
+        with:
+          repository: blesswinsamuel/homebrew-tap
+          ref: main
+          ssh-key: ${{ secrets.HOMEBREW_TAP_SSH_KEY }}
+
+      - name: Download formula
+        uses: actions/download-artifact@v8
+        with:
+          pattern: artifacts-*
+          path: Formula/
+          merge-multiple: true
+
+      - name: Commit formula
+        env:
+          PLAN: ${{ inputs.plan }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          for release in $(echo "$PLAN" | jq --compact-output '.releases[] | select([.artifacts[] | endswith(".rb")] | any)'); do
+            filename=$(echo "$release" | jq '.artifacts[] | select(endswith(".rb"))' --raw-output)
+            version=$(echo "$release" | jq .app_version --raw-output)
+
+            git add "Formula/${filename}"
+            git commit -m "${filename%.rb} ${version}"
+          done
+
+          git push origin HEAD:main

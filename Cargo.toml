@@ -18,10 +18,8 @@ cargo-dist-version = "0.34.0"
 ci = "github"
 # The installers to generate for each app
 installers = ["shell", "homebrew"]
-# A GitHub repo to push Homebrew formulas to
-tap = "blesswinsamuel/homebrew-tap"
 # Publish jobs to run in CI
-publish-jobs = ["homebrew"]
+publish-jobs = ["./publish-homebrew"]
 # Which actions to run on pull requests
 pr-run-mode = "skip"
 # Checksums to generate for each App
