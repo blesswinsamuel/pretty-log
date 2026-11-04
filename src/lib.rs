@@ -386,6 +386,16 @@ mod tests {
     }
 
     #[test]
+    fn format_line_keeps_input_field_order() {
+        disable_colors();
+
+        let line = r#"{"z_field":1,"a_field":2,"payload":{"z":1,"a":2}}"#;
+        let formatted = format_line(line, &test_options());
+
+        assert_eq!(formatted, "z_field=1 a_field=2 payload={z:1, a:2}");
+    }
+
+    #[test]
     fn format_line_omits_absent_core_fields() {
         disable_colors();
 
