@@ -25,7 +25,7 @@ publish-jobs = ["homebrew"]
 # Jobs to run before building artifacts
 plan-jobs = ["./test"]
 # Which actions to run on pull requests
-pr-run-mode = "plan"
+pr-run-mode = "skip"
 # Checksums to generate for each App
 checksum = "sha256"
 # Target platforms to build apps for (Rust target-triple syntax)

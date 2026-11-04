@@ -9,8 +9,6 @@ on:
 
 jobs:
   test:
-    # release.yml calls this before building artifacts; ci.yml already covers pull requests
-    if: github.event_name != 'pull_request'
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v6
