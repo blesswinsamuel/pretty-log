@@ -40,12 +40,6 @@ macOS and Linux:
 curl --proto '=https' --tlsv1.2 -LsSf https://github.com/blesswinsamuel/pretty-log/releases/latest/download/pretty-log-installer.sh | sh
 ```
 
-Windows (PowerShell):
-
-```powershell
-powershell -ExecutionPolicy Bypass -c "irm https://github.com/blesswinsamuel/pretty-log/releases/latest/download/pretty-log-installer.ps1 | iex"
-```
-
 ### From GitHub
 
 ```sh
@@ -151,7 +145,7 @@ git tag v0.1.1
 git push origin v0.1.1
 ```
 
-Each release includes prebuilt binaries for Linux (glibc and musl), macOS, and Windows, SHA-256 checksums, shell and PowerShell installers, and a Homebrew formula published to [`blesswinsamuel/homebrew-tap`](https://github.com/blesswinsamuel/homebrew-tap).
+Each release includes prebuilt binaries for Linux and macOS, SHA-256 checksums, a shell installer, and a Homebrew formula published to [`blesswinsamuel/homebrew-tap`](https://github.com/blesswinsamuel/homebrew-tap).
 
 ## Contributing
 
