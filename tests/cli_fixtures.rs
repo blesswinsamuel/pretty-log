@@ -1,4 +1,5 @@
 use regex::Regex;
+use std::fs::File;
 use std::io::Write;
 use std::process::{Child, Command, ExitStatus, Stdio};
 use std::time::{Duration, Instant};
@@ -69,6 +70,26 @@ fn terminates_on_sigint() {
 
     let status = wait_with_timeout(&mut child, Duration::from_secs(10));
     assert_eq!(status.signal(), Some(2), "pretty-log should terminate on SIGINT, got {status:?}");
+}
+
+#[cfg(unix)]
+#[test]
+fn exits_nonzero_when_stdin_cannot_be_read() {
+    // A directory can be opened but not read as a byte stream.
+    let dir = File::open(std::env::temp_dir()).expect("open temp dir");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_pretty-log"))
+        .stdin(Stdio::from(dir))
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .output()
+        .expect("run pretty-log");
+
+    assert_eq!(output.status.code(), Some(1), "a read failure should fail the run");
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("<pretty-log> Error: "), "{stderr:?}");
+    assert!(!stderr.contains("Os {"), "diagnostics should use Display formatting: {stderr:?}");
 }
 
 fn run_pretty_log_bytes(input: &[u8]) -> Vec<u8> {

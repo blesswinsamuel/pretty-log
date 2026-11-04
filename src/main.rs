@@ -2,6 +2,7 @@ use clap::{Parser, ValueEnum};
 use colored::{Color, Colorize};
 use pretty_log::{format_line, FormatOptions};
 use std::io::{self, BufRead, Write};
+use std::process::ExitCode;
 
 fn parse_field_list(value: &str) -> Vec<String> {
     value
@@ -50,7 +51,7 @@ fn program_log(msg: &str) {
     eprintln!("{} {}", "<pretty-log>".color(Color::BrightBlack), msg)
 }
 
-fn main() {
+fn main() -> ExitCode {
     let opts: Opts = Opts::parse();
     match opts.color {
         ColorMode::Auto => colored::control::unset_override(),
@@ -71,6 +72,7 @@ fn main() {
     let mut input = input.lock();
     let mut output = io::stdout().lock();
     let mut buf = Vec::new();
+    let mut failed = false;
     loop {
         buf.clear();
         // Read raw bytes so lines that are not valid UTF-8 still reach the output.
@@ -78,7 +80,8 @@ fn main() {
             Ok(0) => break,
             Ok(_) => {}
             Err(err) => {
-                program_log(&format!("Error: {:?}", err));
+                program_log(&format!("Error: {err}"));
+                failed = true;
                 break;
             }
         }
@@ -89,12 +92,28 @@ fn main() {
             }
         }
         let line = String::from_utf8_lossy(&buf);
-        if let Err(err) = writeln!(output, "{}", format_line(&line, &format_opts)) {
-            // Stop reading once stdout is gone instead of panicking on the write error.
-            if err.kind() != io::ErrorKind::BrokenPipe {
-                program_log(&format!("Error: {:?}", err));
+        match writeln!(output, "{}", format_line(&line, &format_opts)) {
+            Ok(()) => {}
+            // The consumer stopped reading, which is a normal way to end the stream.
+            Err(err) if err.kind() == io::ErrorKind::BrokenPipe => break,
+            Err(err) => {
+                program_log(&format!("Error: {err}"));
+                failed = true;
+                break;
             }
-            break;
         }
+    }
+
+    if let Err(err) = output.flush() {
+        if !failed && err.kind() != io::ErrorKind::BrokenPipe {
+            program_log(&format!("Error: {err}"));
+            failed = true;
+        }
+    }
+
+    if failed {
+        ExitCode::FAILURE
+    } else {
+        ExitCode::SUCCESS
     }
 }
