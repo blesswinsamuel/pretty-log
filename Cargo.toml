@@ -37,7 +37,6 @@ colored = "3"
 clap = { version = "4.5.40", features = ["derive"] }
 chrono = "0.4"
 dateparser = "0.2.1"
-signal-hook = { version = "0.3.18", features = ["extended-siginfo"] }
 
 [dev-dependencies]
 regex = "1.11"

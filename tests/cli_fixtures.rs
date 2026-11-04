@@ -44,6 +44,33 @@ fn exits_cleanly_when_stdout_closes_early() {
     assert!(status.success(), "pretty-log should exit cleanly after a broken pipe, got {status:?}");
 }
 
+#[cfg(unix)]
+#[test]
+fn terminates_on_sigint() {
+    use std::os::unix::process::ExitStatusExt;
+
+    let mut child = Command::new(env!("CARGO_BIN_EXE_pretty-log"))
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .expect("spawn pretty-log binary");
+
+    // Keep stdin open so the process stays running and waiting for input.
+    let _stdin = child.stdin.take().expect("stdin handle");
+
+    std::thread::sleep(Duration::from_millis(500));
+    let kill = Command::new("kill")
+        .arg("-INT")
+        .arg(child.id().to_string())
+        .status()
+        .expect("send SIGINT to pretty-log");
+    assert!(kill.success(), "failed to send SIGINT");
+
+    let status = wait_with_timeout(&mut child, Duration::from_secs(10));
+    assert_eq!(status.signal(), Some(2), "pretty-log should terminate on SIGINT, got {status:?}");
+}
+
 fn run_pretty_log(input: &str) -> String {
     let mut child = Command::new(env!("CARGO_BIN_EXE_pretty-log"))
         .stdin(Stdio::piped())

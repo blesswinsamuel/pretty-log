@@ -1,10 +1,7 @@
 use clap::{Parser, ValueEnum};
 use colored::{Color, Colorize};
 use pretty_log::{format_line, FormatOptions};
-use signal_hook::iterator::Signals;
 use std::io::{self, BufRead, Write};
-use std::os::raw::c_int;
-use std::thread;
 
 fn parse_field_list(value: &str) -> Vec<String> {
     value
@@ -69,53 +66,24 @@ fn main() {
         exclude_fields: parse_field_list(&opts.exclude_fields).into_iter().collect(),
         field_order: parse_field_list(&opts.field_order),
     };
-    #[cfg(unix)]
-    const SIGNALS: &[c_int] = &[
-        signal_hook::consts::SIGHUP,
-        signal_hook::consts::SIGINT,
-        signal_hook::consts::SIGTERM,
-        signal_hook::consts::SIGQUIT,
-    ];
-    #[cfg(windows)]
-    const SIGNALS: &[c_int] = &[signal_hook::consts::SIGINT, signal_hook::consts::SIGTERM];
-    let mut sigs = match Signals::new(SIGNALS) {
-        Ok(sigs) => sigs,
-        Err(err) => {
-            program_log(&format!("Failed to install signal handlers: {:?}", err));
-            std::process::exit(1);
-        }
-    };
 
-    thread::scope(|s| {
-        let sigs_handle = sigs.handle();
-        s.spawn(move || {
-            if let Some(signal) = (&mut sigs).into_iter().next() {
-                program_log(&format!("Received signal {:?}", signal));
-                // After printing it, do whatever the signal was supposed to do in the first place
-                // low_level::emulate_default_handler(signal).unwrap();
+    let input = io::stdin();
+    let mut output = io::stdout().lock();
+    for line in input.lock().lines() {
+        let line = match line {
+            Ok(l) => l,
+            Err(err) => {
+                program_log(&format!("Error: {:?}", err));
+                continue;
             }
-        });
-        s.spawn(move || {
-            let input = io::stdin();
-            let mut output = io::stdout().lock();
-            for line in input.lock().lines() {
-                let line = match line {
-                    Ok(l) => l,
-                    Err(err) => {
-                        program_log(&format!("Error: {:?}", err));
-                        continue;
-                    }
-                };
-                if let Err(err) = writeln!(output, "{}", format_line(&line, &format_opts)) {
-                    // Stop reading once stdout is gone instead of panicking on the write error.
-                    if err.kind() != io::ErrorKind::BrokenPipe {
-                        program_log(&format!("Error: {:?}", err));
-                    }
-                    break;
-                }
+        };
+        if let Err(err) = writeln!(output, "{}", format_line(&line, &format_opts)) {
+            // Stop reading once stdout is gone instead of panicking on the write error.
+            if err.kind() != io::ErrorKind::BrokenPipe {
+                program_log(&format!("Error: {:?}", err));
             }
-            program_log("Stopping");
-            sigs_handle.close();
-        });
-    });
+            break;
+        }
+    }
+    program_log("Stopping");
 }
