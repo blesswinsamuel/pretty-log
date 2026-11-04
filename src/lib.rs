@@ -62,13 +62,32 @@ fn get_time(obj: &Map<String, Value>, key: &str) -> (ColoredString, String) {
         }
     }
 
+    fn human_readable_date_from_float(v: f64) -> Option<DateTime<Local>> {
+        // Fractional timestamps are epoch seconds below 1e11 and epoch milliseconds above it.
+        let seconds = if v.abs() <= 1e11 {
+            v
+        } else if v.abs() < 1e14 {
+            v / 1000.0
+        } else {
+            return None;
+        };
+        let secs = seconds.floor() as i64;
+        let nanos = ((seconds - seconds.floor()) * 1e9).round() as u32;
+        // Rounding the fraction up to a full second must carry into the seconds.
+        let (secs, nanos) = if nanos >= 1_000_000_000 { (secs + 1, 0) } else { (secs, nanos) };
+        Local.timestamp_opt(secs, nanos).single()
+    }
+
     for key in key.split(',') {
         let v = match obj.get(key) {
             Some(v) => v,
             None => continue,
         };
         let date = match v {
-            Value::Number(n) => human_readable_date_from_int(n.as_i64().unwrap_or_default()),
+            Value::Number(n) => match n.as_i64() {
+                Some(v) => human_readable_date_from_int(v),
+                None => n.as_f64().and_then(human_readable_date_from_float),
+            },
             Value::String(s) => human_readable_date_from_string(s),
             _ => None,
         };
@@ -305,6 +324,32 @@ mod tests {
 
         assert!(formatted.contains("ERROR"));
         assert!(formatted.contains("boom"));
+    }
+
+    #[test]
+    fn get_time_parses_fractional_timestamps() {
+        disable_colors();
+
+        for (value, equivalent_millis) in [(json!(1624829360.868), 1624829360868_i64), (json!(1624829360868.5), 1624829360868_i64)] {
+            let fractional = json!({ "time": value });
+            let whole = json!({ "time": equivalent_millis });
+
+            let (fractional, _) = get_time(fractional.as_object().unwrap(), "time");
+            let (whole, _) = get_time(whole.as_object().unwrap(), "time");
+
+            assert_eq!(fractional.to_string(), whole.to_string());
+        }
+    }
+
+    #[test]
+    fn get_time_keeps_timestamps_it_cannot_parse() {
+        disable_colors();
+
+        let line = r#"{"time":18446744073709551615,"level":30,"message":"hello"}"#;
+        let formatted = format_line(line, &test_options());
+
+        assert!(formatted.contains("18446744073709551615"), "{formatted:?}");
+        assert!(!formatted.contains("1970"), "{formatted:?}");
     }
 
     #[test]
