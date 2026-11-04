@@ -1,6 +1,6 @@
 [package]
 name = "pretty-log"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "Parses JSON logs and prints them in a clean, colorized view for humans."
 homepage = "https://github.com/blesswinsamuel/pretty-log"
