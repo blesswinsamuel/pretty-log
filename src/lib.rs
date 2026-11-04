@@ -169,93 +169,122 @@ fn get_message(obj: &Map<String, Value>, key: &str) -> (ColoredString, String) {
     (ColoredString::default(), String::new())
 }
 
+struct FieldFilter<'a> {
+    include: Option<&'a HashSet<String>>,
+    exclude: &'a HashSet<String>,
+    order: &'a [String],
+}
+
+impl FieldFilter<'_> {
+    /// `path` is the dotted path of a field, such as `req.id` or `req`.
+    fn is_visible(&self, path: &str) -> bool {
+        if self.exclude.contains(path) {
+            return false;
+        }
+        self.include.is_none_or(|include| {
+            include
+                .iter()
+                .any(|selector| selector == path || is_ancestor(selector, path) || is_ancestor(path, selector))
+        })
+    }
+
+    /// Position of `path` in `--field-order`; a selector for a descendant also positions its parents.
+    fn order_index(&self, path: &str) -> Option<usize> {
+        self.order.iter().position(|selector| selector == path || is_ancestor(path, selector))
+    }
+}
+
+fn is_ancestor(ancestor: &str, path: &str) -> bool {
+    path.len() > ancestor.len() && path.starts_with(ancestor) && path.as_bytes()[ancestor.len()] == b'.'
+}
+
+fn join_path(parent: &str, key: &str) -> String {
+    if parent.is_empty() {
+        key.to_string()
+    } else {
+        format!("{parent}.{key}")
+    }
+}
+
+fn ordered_fields<'a>(parent: &str, obj: &'a Map<String, Value>, filter: &FieldFilter) -> Vec<(&'a String, &'a Value, String)> {
+    let mut fields: Vec<(&String, &Value, String)> = obj
+        .iter()
+        .map(|(key, value)| (key, value, join_path(parent, key)))
+        .filter(|(_, _, path)| filter.is_visible(path))
+        .collect();
+    // Stable: fields without a --field-order entry keep their input order.
+    fields.sort_by_key(|(_, _, path)| filter.order_index(path).unwrap_or(usize::MAX));
+    fields
+}
+
 fn get_fields(obj: &Map<String, Value>, exclude_fields: &HashSet<String>, include_fields: Option<&HashSet<String>>, field_order: &[String]) -> String {
     enum RenderedField {
         Inline(String),
         Block(String),
     }
 
-    fn get_field(k: &str, v: &Value) -> RenderedField {
-        fn get_field_value(v: &Value) -> String {
-            match v {
-                Value::String(s) => format!(r#""{}""#, s).color(Color::BrightBlue).to_string(),
-                Value::Number(n) => format!("{}", n).color(Color::BrightCyan).to_string(),
-                Value::Bool(b) => format!("{}", b).color(Color::BrightGreen).to_string(),
-                Value::Object(map) => {
-                    let mut res: Vec<String> = vec![];
-                    for (k, v) in map {
-                        res.push(format!(
-                            "{}{}{}",
-                            k.color(Color::BrightBlack),
-                            ":".color(Color::BrightYellow),
-                            get_field_value(v)
-                        ));
-                    }
-                    format!(
+    fn get_field_value(path: &str, v: &Value, filter: &FieldFilter) -> String {
+        match v {
+            Value::String(s) => format!(r#""{}""#, s).color(Color::BrightBlue).to_string(),
+            Value::Number(n) => format!("{}", n).color(Color::BrightCyan).to_string(),
+            Value::Bool(b) => format!("{}", b).color(Color::BrightGreen).to_string(),
+            Value::Object(map) => {
+                let mut res: Vec<String> = vec![];
+                for (k, v, child_path) in ordered_fields(path, map, filter) {
+                    res.push(format!(
                         "{}{}{}",
-                        "{".color(Color::BrightYellow),
-                        res.join(", ".color(Color::BrightYellow).to_string().as_str()),
-                        "}".color(Color::BrightYellow)
-                    )
+                        k.color(Color::BrightBlack),
+                        ":".color(Color::BrightYellow),
+                        get_field_value(&child_path, v, filter)
+                    ));
                 }
-                Value::Array(array) => {
-                    let mut res: Vec<String> = vec![];
-                    for v in array {
-                        res.push(get_field_value(v));
-                    }
-                    format!(
-                        "{}{}{}",
-                        "[".color(Color::BrightMagenta),
-                        res.join(", ".color(Color::BrightMagenta).to_string().as_str()),
-                        "]".color(Color::BrightMagenta)
-                    )
-                }
-                Value::Null => "null".color(Color::BrightRed).to_string(),
+                format!(
+                    "{}{}{}",
+                    "{".color(Color::BrightYellow),
+                    res.join(", ".color(Color::BrightYellow).to_string().as_str()),
+                    "}".color(Color::BrightYellow)
+                )
             }
+            Value::Array(array) => {
+                let mut res: Vec<String> = vec![];
+                for v in array {
+                    res.push(get_field_value(path, v, filter));
+                }
+                format!(
+                    "{}{}{}",
+                    "[".color(Color::BrightMagenta),
+                    res.join(", ".color(Color::BrightMagenta).to_string().as_str()),
+                    "]".color(Color::BrightMagenta)
+                )
+            }
+            Value::Null => "null".color(Color::BrightRed).to_string(),
         }
+    }
 
+    fn get_field(key: &str, v: &Value, path: &str, filter: &FieldFilter) -> RenderedField {
         if let Value::String(s) = v {
             if s.contains('\n') {
                 let indented_lines = s.lines().map(|line| format!("  {}", line)).collect::<Vec<String>>().join("\n");
-                return RenderedField::Block(format!("{}:\n{}", k.color(Color::BrightBlack), indented_lines));
+                return RenderedField::Block(format!("{}:\n{}", key.color(Color::BrightBlack), indented_lines));
             }
         }
 
-        RenderedField::Inline(format!("{}={}", k.color(Color::BrightBlack), get_field_value(v)))
+        RenderedField::Inline(format!("{}={}", key.color(Color::BrightBlack), get_field_value(path, v, filter)))
     }
 
-    fn is_visible(k: &str, include_fields: Option<&HashSet<String>>, exclude_fields: &HashSet<String>) -> bool {
-        if exclude_fields.contains(k) {
-            return false;
-        }
-        include_fields.map(|fields| fields.contains(k)).unwrap_or(true)
-    }
-
+    let filter = FieldFilter {
+        include: include_fields,
+        exclude: exclude_fields,
+        order: field_order,
+    };
     let mut inline_fields: Vec<String> = vec![];
     let mut block_fields: Vec<String> = vec![];
-    let mut rendered_keys: HashSet<String> = HashSet::new();
 
-    let mut push_field = |k: &str, f: &Value| match get_field(k, f) {
-        RenderedField::Inline(field) => inline_fields.push(field),
-        RenderedField::Block(field) => block_fields.push(field),
-    };
-
-    for key in field_order {
-        if rendered_keys.contains(key) || !is_visible(key, include_fields, exclude_fields) {
-            continue;
+    for (key, value, path) in ordered_fields("", obj, &filter) {
+        match get_field(key, value, &path, &filter) {
+            RenderedField::Inline(field) => inline_fields.push(field),
+            RenderedField::Block(field) => block_fields.push(field),
         }
-        if let Some(value) = obj.get(key) {
-            push_field(key, value);
-            rendered_keys.insert(key.clone());
-        }
-    }
-
-    for (k, f) in obj {
-        if rendered_keys.contains(k) || !is_visible(k, include_fields, exclude_fields) {
-            continue;
-        }
-        push_field(k, f);
-        rendered_keys.insert(k.clone());
     }
 
     match (inline_fields.is_empty(), block_fields.is_empty()) {
@@ -445,6 +474,58 @@ mod tests {
             let formatted = format_line(line, &test_options());
             assert_eq!(formatted.trim_end(), formatted, "trailing whitespace in {formatted:?}");
         }
+    }
+
+    #[test]
+    fn include_fields_selects_nested_keys() {
+        disable_colors();
+
+        let mut opts = test_options();
+        opts.include_fields = Some(["req.id".to_string(), "service".to_string()].iter().cloned().collect());
+
+        let line = r#"{"level":30,"message":"hello","service":"api","req":{"id":"r1","method":"POST"}}"#;
+        let formatted = format_line(line, &opts);
+
+        assert_eq!(formatted, "INFO hello service=\"api\" req={id:\"r1\"}");
+    }
+
+    #[test]
+    fn include_fields_accepts_subtree_selectors() {
+        disable_colors();
+
+        let mut opts = test_options();
+        opts.include_fields = Some(["req".to_string()].iter().cloned().collect());
+
+        let line = r#"{"level":30,"message":"hello","service":"api","req":{"id":"r1","method":"POST"}}"#;
+        let formatted = format_line(line, &opts);
+
+        assert_eq!(formatted, "INFO hello req={id:\"r1\", method:\"POST\"}");
+    }
+
+    #[test]
+    fn exclude_fields_hides_nested_keys() {
+        disable_colors();
+
+        let mut opts = test_options();
+        opts.exclude_fields = ["req.method".to_string()].iter().cloned().collect();
+
+        let line = r#"{"level":30,"message":"hello","req":{"id":"r1","method":"POST"}}"#;
+        let formatted = format_line(line, &opts);
+
+        assert_eq!(formatted, "INFO hello req={id:\"r1\"}");
+    }
+
+    #[test]
+    fn field_order_accepts_nested_paths() {
+        disable_colors();
+
+        let mut opts = test_options();
+        opts.field_order = vec!["req.method".to_string()];
+
+        let line = r#"{"level":30,"message":"hello","req":{"id":"r1","method":"POST"}}"#;
+        let formatted = format_line(line, &opts);
+
+        assert_eq!(formatted, "INFO hello req={method:\"POST\", id:\"r1\"}");
     }
 
     #[test]

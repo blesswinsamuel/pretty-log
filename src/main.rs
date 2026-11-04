@@ -25,13 +25,13 @@ struct Opts {
     /// Field that represents message
     #[arg(short, long, default_value = "message,msg")]
     message_field: String,
-    /// Comma-separated non-core fields to include in the output
+    /// Comma-separated non-core fields to include in the output; dotted paths select nested fields
     #[arg(long, default_value = "")]
     include_fields: String,
-    /// Comma-separated non-core fields to hide from the output
+    /// Comma-separated non-core fields to hide from the output; dotted paths hide nested fields
     #[arg(long, default_value = "")]
     exclude_fields: String,
-    /// Comma-separated preferred order for non-core fields
+    /// Comma-separated preferred order for non-core fields; dotted paths order nested fields
     #[arg(long, default_value = "")]
     field_order: String,
     /// When to use colorized output

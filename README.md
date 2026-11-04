@@ -100,6 +100,12 @@ Show only selected context fields:
 cat test/logs_pino.txt | pretty-log --include-fields service,jobId,invoiceId --field-order service,jobId,invoiceId
 ```
 
+Field names may be dotted paths, so nested fields can be selected, hidden, or ordered too:
+
+```sh
+cat test/logs.txt | pretty-log --include-fields service,req.id --exclude-fields req.method
+```
+
 Force plain output (no ANSI colors):
 
 ```sh
