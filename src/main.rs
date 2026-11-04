@@ -69,12 +69,15 @@ fn main() {
         exclude_fields: parse_field_list(&opts.exclude_fields).into_iter().collect(),
         field_order: parse_field_list(&opts.field_order),
     };
+    #[cfg(unix)]
     const SIGNALS: &[c_int] = &[
         signal_hook::consts::SIGHUP,
         signal_hook::consts::SIGINT,
         signal_hook::consts::SIGTERM,
         signal_hook::consts::SIGQUIT,
     ];
+    #[cfg(windows)]
+    const SIGNALS: &[c_int] = &[signal_hook::consts::SIGINT, signal_hook::consts::SIGTERM];
     let mut sigs = match Signals::new(SIGNALS) {
         Ok(sigs) => sigs,
         Err(err) => {

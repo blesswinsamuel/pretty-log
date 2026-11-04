@@ -1,0 +1,23 @@
+name: Test
+
+on:
+  workflow_call:
+    inputs:
+      plan:
+        required: false
+        type: string
+
+jobs:
+  test:
+    # release.yml calls this before building artifacts; ci.yml already covers pull requests
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Run tests
+        run: cargo test --locked
