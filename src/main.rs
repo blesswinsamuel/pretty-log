@@ -2,7 +2,7 @@ use clap::{Parser, ValueEnum};
 use colored::{Color, Colorize};
 use pretty_log::{format_line, FormatOptions};
 use signal_hook::iterator::Signals;
-use std::io::{self, BufRead};
+use std::io::{self, BufRead, Write};
 use std::os::raw::c_int;
 use std::thread;
 
@@ -97,6 +97,7 @@ fn main() {
         });
         s.spawn(move || {
             let input = io::stdin();
+            let mut output = io::stdout().lock();
             for line in input.lock().lines() {
                 let line = match line {
                     Ok(l) => l,
@@ -105,7 +106,13 @@ fn main() {
                         continue;
                     }
                 };
-                println!("{}", format_line(&line, &format_opts));
+                if let Err(err) = writeln!(output, "{}", format_line(&line, &format_opts)) {
+                    // Stop reading once stdout is gone instead of panicking on the write error.
+                    if err.kind() != io::ErrorKind::BrokenPipe {
+                        program_log(&format!("Error: {:?}", err));
+                    }
+                    break;
+                }
             }
             program_log("Stopping");
             sigs_handle.close();

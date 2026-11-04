@@ -1,10 +1,47 @@
 use regex::Regex;
 use std::io::Write;
-use std::process::{Command, Stdio};
+use std::process::{Child, Command, ExitStatus, Stdio};
+use std::time::{Duration, Instant};
 
 fn strip_ansi(input: &str) -> String {
     let ansi_pattern = Regex::new(r"\x1b\[[0-9;]*m").expect("valid ansi regex");
     ansi_pattern.replace_all(input, "").into_owned()
+}
+
+fn wait_with_timeout(child: &mut Child, timeout: Duration) -> ExitStatus {
+    let deadline = Instant::now() + timeout;
+    loop {
+        if let Some(status) = child.try_wait().expect("poll pretty-log") {
+            return status;
+        }
+        if Instant::now() > deadline {
+            let _ = child.kill();
+            panic!("pretty-log did not exit within {timeout:?}");
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+}
+
+#[test]
+fn exits_cleanly_when_stdout_closes_early() {
+    let mut child = Command::new(env!("CARGO_BIN_EXE_pretty-log"))
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .expect("spawn pretty-log binary");
+
+    // Simulate a consumer such as `head` going away: close the read end of stdout.
+    drop(child.stdout.take());
+
+    let mut stdin = child.stdin.take().expect("stdin handle");
+    let line = "{\"time\":1624829360868,\"level\":30,\"message\":\"line\"}\n";
+    // Ignore the write error: the child may already have exited.
+    let _ = stdin.write_all(line.repeat(10_000).as_bytes());
+    drop(stdin);
+
+    let status = wait_with_timeout(&mut child, Duration::from_secs(10));
+    assert!(status.success(), "pretty-log should exit cleanly after a broken pipe, got {status:?}");
 }
 
 fn run_pretty_log(input: &str) -> String {
