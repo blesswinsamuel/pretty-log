@@ -2,6 +2,7 @@ use chrono::prelude::*;
 use colored::{Color, ColoredString, Colorize};
 use serde_json::Map;
 use serde_json::{Result, Value};
+use std::borrow::Cow;
 use std::collections::HashSet;
 
 #[derive(Debug, Clone)]
@@ -45,6 +46,24 @@ pub fn format_line(line: &str, opts: &FormatOptions) -> String {
         .filter(|part| !part.is_empty())
         .collect::<Vec<String>>()
         .join(" ")
+}
+
+/// Renders control characters visibly so log content cannot drive the terminal.
+fn escape_control_chars(value: &str) -> Cow<'_, str> {
+    if !value.chars().any(char::is_control) {
+        return Cow::Borrowed(value);
+    }
+    let mut escaped = String::with_capacity(value.len());
+    for c in value.chars() {
+        match c {
+            '\t' => escaped.push(c),
+            '\n' => escaped.push_str("\\n"),
+            '\r' => escaped.push_str("\\r"),
+            c if c.is_control() => escaped.push_str(&format!("\\u{{{:x}}}", u32::from(c))),
+            c => escaped.push(c),
+        }
+    }
+    Cow::Owned(escaped)
 }
 
 fn get_time(obj: &Map<String, Value>, key: &str) -> (ColoredString, String) {
@@ -99,7 +118,7 @@ fn get_time(obj: &Map<String, Value>, key: &str) -> (ColoredString, String) {
             Some(d) => format!("{}", d.format("%H:%M:%S.%3f")),
             None => match v {
                 Value::Number(n) => n.to_string(),
-                Value::String(s) => s.to_string(),
+                Value::String(s) => escape_control_chars(s).into_owned(),
                 _ => v.to_string(),
             },
         };
@@ -153,7 +172,7 @@ fn get_level(obj: &Map<String, Value>, key: &str, pad: bool) -> (ColoredString, 
         };
         let normalized_level = match v {
             Value::Number(n) => normalize_int_log_level(n.as_u64().unwrap_or(0)),
-            Value::String(s) => normalize_string_log_level(s),
+            Value::String(s) => normalize_string_log_level(&escape_control_chars(s)),
             _ => format!("invalid ({})", v),
         };
         return (colorize_log_level(normalized_level.to_uppercase(), pad), key.to_string());
@@ -170,7 +189,7 @@ fn get_message(obj: &Map<String, Value>, key: &str) -> (ColoredString, String) {
         };
         let v = match v {
             Value::Number(n) => n.to_string().color(Color::White).bold(),
-            Value::String(s) => s.clone().color(Color::White).bold(),
+            Value::String(s) => escape_control_chars(s).into_owned().color(Color::White).bold(),
             _ => v.to_string().color(Color::BrightRed).bold(),
         };
         return (v, key.to_string());
@@ -235,7 +254,7 @@ fn get_fields(obj: &Map<String, Value>, exclude_fields: &HashSet<String>, includ
 
     fn get_field_value(path: &str, v: &Value, filter: &FieldFilter) -> String {
         match v {
-            Value::String(s) => format!(r#""{}""#, s).color(Color::BrightBlue).to_string(),
+            Value::String(s) => format!(r#""{}""#, escape_control_chars(s)).color(Color::BrightBlue).to_string(),
             Value::Number(n) => format!("{}", n).color(Color::BrightCyan).to_string(),
             Value::Bool(b) => format!("{}", b).color(Color::BrightGreen).to_string(),
             Value::Object(map) => {
@@ -243,7 +262,7 @@ fn get_fields(obj: &Map<String, Value>, exclude_fields: &HashSet<String>, includ
                 for (k, v, child_path) in ordered_fields(path, map, filter) {
                     res.push(format!(
                         "{}{}{}",
-                        k.color(Color::BrightBlack),
+                        escape_control_chars(k).color(Color::BrightBlack),
                         ":".color(Color::BrightYellow),
                         get_field_value(&child_path, v, filter)
                     ));
@@ -274,12 +293,20 @@ fn get_fields(obj: &Map<String, Value>, exclude_fields: &HashSet<String>, includ
     fn get_field(key: &str, v: &Value, path: &str, filter: &FieldFilter) -> RenderedField {
         if let Value::String(s) = v {
             if s.contains('\n') {
-                let indented_lines = s.lines().map(|line| format!("  {}", line)).collect::<Vec<String>>().join("\n");
-                return RenderedField::Block(format!("{}:\n{}", key.color(Color::BrightBlack), indented_lines));
+                let indented_lines = s
+                    .lines()
+                    .map(|line| format!("  {}", escape_control_chars(line)))
+                    .collect::<Vec<String>>()
+                    .join("\n");
+                return RenderedField::Block(format!("{}:\n{}", escape_control_chars(key).color(Color::BrightBlack), indented_lines));
             }
         }
 
-        RenderedField::Inline(format!("{}={}", key.color(Color::BrightBlack), get_field_value(path, v, filter)))
+        RenderedField::Inline(format!(
+            "{}={}",
+            escape_control_chars(key).color(Color::BrightBlack),
+            get_field_value(path, v, filter)
+        ))
     }
 
     let filter = FieldFilter {
@@ -363,6 +390,19 @@ mod tests {
 
         assert!(formatted.contains("ERROR"));
         assert!(formatted.contains("boom"));
+    }
+
+    #[test]
+    fn format_line_escapes_control_characters() {
+        disable_colors();
+
+        let line = r#"{"level":30,"message":"\u001b[31mred\u001b[0m","note":"tab\there","key\u001b":"v"}"#;
+        let formatted = format_line(line, &test_options());
+
+        assert!(!formatted.contains('\u{1b}'), "escape sequence reached the output: {formatted:?}");
+        assert!(formatted.contains("\\u{1b}[31mred"), "{formatted:?}");
+        assert!(formatted.contains("tab\there"), "{formatted:?}");
+        assert!(formatted.contains("key\\u{1b}=\"v\""), "{formatted:?}");
     }
 
     #[test]
