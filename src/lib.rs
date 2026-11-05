@@ -34,18 +34,29 @@ pub fn format_line(line: &str, opts: &FormatOptions) -> String {
     let (time_str, time_key) = get_time(obj, &opts.time_field);
     // Only pad the level when a time column precedes it, so a line without a time starts flush left.
     let (level_str, level_key) = get_level(obj, &opts.level_field, !time_str.is_empty());
-    let (message_str, message_key) = get_message(obj, &opts.message_field);
+    let (message_lines, message_key) = get_message(obj, &opts.message_field);
     let mut excluded_fields: HashSet<String> = [time_key, level_key, message_key].iter().cloned().collect();
     excluded_fields.extend(opts.exclude_fields.iter().cloned());
-    let fields_str = get_fields(obj, &excluded_fields, opts.include_fields.as_ref(), &opts.field_order);
+    let (inline_fields, block_fields) = get_fields(obj, &excluded_fields, opts.include_fields.as_ref(), &opts.field_order);
 
-    [time_str, level_str, message_str]
+    // A multiline message keeps its first line in the header and continues as an indented block.
+    let message_first = message_lines.first().map(|line| line.to_string()).unwrap_or_default();
+    let header = [time_str.to_string(), level_str.to_string(), message_first, inline_fields]
         .into_iter()
-        .map(|part| part.to_string())
-        .chain(std::iter::once(fields_str))
         .filter(|part| !part.is_empty())
         .collect::<Vec<String>>()
-        .join(" ")
+        .join(" ");
+
+    let mut lines: Vec<String> = Vec::new();
+    if !header.is_empty() {
+        lines.push(header);
+    }
+    lines.extend(message_lines.iter().skip(1).map(|line| format!("  {line}")));
+    if !block_fields.is_empty() {
+        lines.push(block_fields);
+    }
+
+    lines.join("\n")
 }
 
 /// Renders control characters visibly so log content cannot drive the terminal.
@@ -181,21 +192,24 @@ fn get_level(obj: &Map<String, Value>, key: &str, pad: bool) -> (ColoredString, 
     (ColoredString::default(), String::new())
 }
 
-fn get_message(obj: &Map<String, Value>, key: &str) -> (ColoredString, String) {
+fn get_message(obj: &Map<String, Value>, key: &str) -> (Vec<ColoredString>, String) {
     for key in key.split(',') {
         let v = match obj.get(key) {
             Some(v) => v,
             None => continue,
         };
-        let v = match v {
-            Value::Number(n) => n.to_string().color(Color::White).bold(),
-            Value::String(s) => escape_control_chars(s).into_owned().color(Color::White).bold(),
-            _ => v.to_string().color(Color::BrightRed).bold(),
+        let lines = match v {
+            Value::Number(n) => vec![n.to_string().color(Color::White).bold()],
+            Value::String(s) => s
+                .lines()
+                .map(|line| escape_control_chars(line).into_owned().color(Color::White).bold())
+                .collect(),
+            _ => vec![v.to_string().color(Color::BrightRed).bold()],
         };
-        return (v, key.to_string());
+        return (lines, key.to_string());
     }
 
-    (ColoredString::default(), String::new())
+    (Vec::new(), String::new())
 }
 
 struct FieldFilter<'a> {
@@ -246,67 +260,120 @@ fn ordered_fields<'a>(parent: &str, obj: &'a Map<String, Value>, filter: &FieldF
     fields
 }
 
-fn get_fields(obj: &Map<String, Value>, exclude_fields: &HashSet<String>, include_fields: Option<&HashSet<String>>, field_order: &[String]) -> String {
+enum RenderedValue {
+    Inline(String),
+    /// Logical lines without leading indentation; the caller indents the block.
+    Block(Vec<String>),
+}
+
+fn indent_lines(lines: Vec<String>) -> Vec<String> {
+    lines.into_iter().map(|line| format!("  {line}")).collect()
+}
+
+fn render_value(path: &str, v: &Value, filter: &FieldFilter) -> RenderedValue {
+    match v {
+        Value::String(s) if s.contains('\n') => RenderedValue::Block(s.lines().map(|line| escape_control_chars(line).into_owned()).collect()),
+        Value::String(s) => RenderedValue::Inline(format!(r#""{}""#, escape_control_chars(s)).color(Color::BrightBlue).to_string()),
+        Value::Number(n) => RenderedValue::Inline(format!("{}", n).color(Color::BrightCyan).to_string()),
+        Value::Bool(b) => RenderedValue::Inline(format!("{}", b).color(Color::BrightGreen).to_string()),
+        Value::Object(map) => render_object(path, map, filter),
+        Value::Array(array) => render_array(path, array, filter),
+        Value::Null => RenderedValue::Inline("null".color(Color::BrightRed).to_string()),
+    }
+}
+
+fn render_object(path: &str, map: &Map<String, Value>, filter: &FieldFilter) -> RenderedValue {
+    let children: Vec<(Cow<'_, str>, RenderedValue)> = ordered_fields(path, map, filter)
+        .into_iter()
+        .map(|(key, value, child_path)| (escape_control_chars(key), render_value(&child_path, value, filter)))
+        .collect();
+
+    if children.iter().all(|(_, value)| matches!(value, RenderedValue::Inline(_))) {
+        let parts: Vec<String> = children
+            .into_iter()
+            .filter_map(|(key, value)| match value {
+                RenderedValue::Inline(value) => Some(format!("{}{}{}", key.color(Color::BrightBlack), ":".color(Color::BrightYellow), value)),
+                RenderedValue::Block(_) => None,
+            })
+            .collect();
+        return RenderedValue::Inline(format!(
+            "{}{}{}",
+            "{".color(Color::BrightYellow),
+            parts.join(", ".color(Color::BrightYellow).to_string().as_str()),
+            "}".color(Color::BrightYellow)
+        ));
+    }
+
+    let mut lines = Vec::new();
+    for (key, value) in children {
+        match value {
+            RenderedValue::Inline(value) => lines.push(format!("{}: {}", key.color(Color::BrightBlack), value)),
+            RenderedValue::Block(block) => {
+                lines.push(format!("{}:", key.color(Color::BrightBlack)));
+                lines.extend(indent_lines(block));
+            }
+        }
+    }
+    RenderedValue::Block(lines)
+}
+
+fn render_array(path: &str, array: &[Value], filter: &FieldFilter) -> RenderedValue {
+    let items: Vec<RenderedValue> = array.iter().map(|item| render_value(path, item, filter)).collect();
+
+    if items.iter().all(|item| matches!(item, RenderedValue::Inline(_))) {
+        let parts: Vec<String> = items
+            .into_iter()
+            .filter_map(|item| match item {
+                RenderedValue::Inline(value) => Some(value),
+                RenderedValue::Block(_) => None,
+            })
+            .collect();
+        return RenderedValue::Inline(format!(
+            "{}{}{}",
+            "[".color(Color::BrightMagenta),
+            parts.join(", ".color(Color::BrightMagenta).to_string().as_str()),
+            "]".color(Color::BrightMagenta)
+        ));
+    }
+
+    let mut lines = Vec::new();
+    for item in items {
+        match item {
+            RenderedValue::Inline(value) => lines.push(format!("{} {}", "-".color(Color::BrightMagenta), value)),
+            RenderedValue::Block(block) => {
+                let mut block = block.into_iter();
+                if let Some(first) = block.next() {
+                    lines.push(format!("{} {}", "-".color(Color::BrightMagenta), first));
+                    lines.extend(indent_lines(block.collect()));
+                }
+            }
+        }
+    }
+    RenderedValue::Block(lines)
+}
+
+/// Returns the fields that fit on the header line and the multiline fields that follow it.
+fn get_fields(
+    obj: &Map<String, Value>,
+    exclude_fields: &HashSet<String>,
+    include_fields: Option<&HashSet<String>>,
+    field_order: &[String],
+) -> (String, String) {
     enum RenderedField {
         Inline(String),
         Block(String),
     }
 
-    fn get_field_value(path: &str, v: &Value, filter: &FieldFilter) -> String {
-        match v {
-            Value::String(s) => format!(r#""{}""#, escape_control_chars(s)).color(Color::BrightBlue).to_string(),
-            Value::Number(n) => format!("{}", n).color(Color::BrightCyan).to_string(),
-            Value::Bool(b) => format!("{}", b).color(Color::BrightGreen).to_string(),
-            Value::Object(map) => {
-                let mut res: Vec<String> = vec![];
-                for (k, v, child_path) in ordered_fields(path, map, filter) {
-                    res.push(format!(
-                        "{}{}{}",
-                        escape_control_chars(k).color(Color::BrightBlack),
-                        ":".color(Color::BrightYellow),
-                        get_field_value(&child_path, v, filter)
-                    ));
-                }
-                format!(
-                    "{}{}{}",
-                    "{".color(Color::BrightYellow),
-                    res.join(", ".color(Color::BrightYellow).to_string().as_str()),
-                    "}".color(Color::BrightYellow)
-                )
-            }
-            Value::Array(array) => {
-                let mut res: Vec<String> = vec![];
-                for v in array {
-                    res.push(get_field_value(path, v, filter));
-                }
-                format!(
-                    "{}{}{}",
-                    "[".color(Color::BrightMagenta),
-                    res.join(", ".color(Color::BrightMagenta).to_string().as_str()),
-                    "]".color(Color::BrightMagenta)
-                )
-            }
-            Value::Null => "null".color(Color::BrightRed).to_string(),
-        }
-    }
-
     fn get_field(key: &str, v: &Value, path: &str, filter: &FieldFilter) -> RenderedField {
-        if let Value::String(s) = v {
-            if s.contains('\n') {
-                let indented_lines = s
-                    .lines()
-                    .map(|line| format!("  {}", escape_control_chars(line)))
-                    .collect::<Vec<String>>()
-                    .join("\n");
-                return RenderedField::Block(format!("{}:\n{}", escape_control_chars(key).color(Color::BrightBlack), indented_lines));
+        let key = escape_control_chars(key);
+        match render_value(path, v, filter) {
+            RenderedValue::Inline(value) => RenderedField::Inline(format!("{}={}", key.color(Color::BrightBlack), value)),
+            RenderedValue::Block(lines) => {
+                let mut block = vec![format!("{}:", key.color(Color::BrightBlack))];
+                block.extend(indent_lines(lines));
+                RenderedField::Block(block.join("\n"))
             }
         }
-
-        RenderedField::Inline(format!(
-            "{}={}",
-            escape_control_chars(key).color(Color::BrightBlack),
-            get_field_value(path, v, filter)
-        ))
     }
 
     let filter = FieldFilter {
@@ -324,12 +391,7 @@ fn get_fields(obj: &Map<String, Value>, exclude_fields: &HashSet<String>, includ
         }
     }
 
-    match (inline_fields.is_empty(), block_fields.is_empty()) {
-        (true, true) => String::new(),
-        (false, true) => inline_fields.join(" "),
-        (true, false) => block_fields.join("\n"),
-        (false, false) => format!("{}\n{}", inline_fields.join(" "), block_fields.join("\n")),
-    }
+    (inline_fields.join(" "), block_fields.join("\n"))
 }
 
 #[cfg(test)]
@@ -457,15 +519,61 @@ mod tests {
             "request_id": 42,
             "ok": true
         });
-        let fields = get_fields(
+        let (inline, block) = get_fields(
             obj.as_object().unwrap(),
             &["time".to_string(), "level".to_string(), "message".to_string()].iter().cloned().collect(),
             None,
             &[],
         );
 
-        assert!(fields.contains("request_id=42"));
-        assert!(fields.contains("ok=true"));
+        assert!(inline.contains("request_id=42"));
+        assert!(inline.contains("ok=true"));
+        assert!(block.is_empty());
+    }
+
+    #[test]
+    fn format_line_renders_nested_multiline_fields_as_blocks() {
+        disable_colors();
+
+        let line = r#"{"level":50,"message":"boom","err":{"code":"DB_TIMEOUT","stack":"Error: boom\n    at main"}}"#;
+        let formatted = format_line(line, &test_options());
+
+        assert_eq!(
+            formatted,
+            r#"ERROR boom
+err:
+  code: "DB_TIMEOUT"
+  stack:
+    Error: boom
+        at main"#
+        );
+    }
+
+    #[test]
+    fn format_line_renders_multiline_messages_as_continuation() {
+        disable_colors();
+
+        let line = r#"{"level":30,"message":"first\nsecond","a":1}"#;
+        let formatted = format_line(line, &test_options());
+
+        assert_eq!(formatted, "INFO first a=1\n  second");
+    }
+
+    #[test]
+    fn format_line_renders_multiline_array_items_as_blocks() {
+        disable_colors();
+
+        let line = r#"{"level":30,"message":"x","items":["a\nb","c"]}"#;
+        let formatted = format_line(line, &test_options());
+
+        assert_eq!(
+            formatted,
+            r#"INFO x
+items:
+  - a
+    b
+  - "c""#
+        );
     }
 
     #[test]
