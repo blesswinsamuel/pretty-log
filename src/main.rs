@@ -1,6 +1,6 @@
 use clap::{Parser, ValueEnum};
 use colored::{Color, Colorize};
-use pretty_log::{format_line, FormatOptions};
+use pretty_log::{format_line, is_valid_time_format, FormatOptions};
 use std::io::{self, BufRead, Write};
 use std::process::ExitCode;
 
@@ -35,6 +35,12 @@ struct Opts {
     /// Comma-separated preferred order for non-core fields; dotted paths order nested fields
     #[arg(long, default_value = "")]
     field_order: String,
+    /// Display timestamps in UTC instead of the local timezone
+    #[arg(long)]
+    utc: bool,
+    /// strftime-style format for timestamps, e.g. "%Y-%m-%d %H:%M:%S%.3f"
+    #[arg(long)]
+    time_format: Option<String>,
     /// When to use colorized output
     #[arg(long, value_enum, default_value_t = ColorMode::Auto)]
     color: ColorMode,
@@ -59,6 +65,12 @@ fn main() -> ExitCode {
         ColorMode::Never => colored::control::set_override(false),
     }
     let include_fields = parse_field_list(&opts.include_fields);
+    if let Some(format) = &opts.time_format {
+        if !is_valid_time_format(format) {
+            program_log(&format!("invalid --time-format: {format}"));
+            return ExitCode::from(2);
+        }
+    }
     let format_opts = FormatOptions {
         time_field: opts.time_field.clone(),
         level_field: opts.level_field.clone(),
@@ -66,6 +78,8 @@ fn main() -> ExitCode {
         include_fields: (!include_fields.is_empty()).then(|| include_fields.iter().cloned().collect()),
         exclude_fields: parse_field_list(&opts.exclude_fields).into_iter().collect(),
         field_order: parse_field_list(&opts.field_order),
+        utc: opts.utc,
+        time_format: opts.time_format.clone(),
     };
 
     let input = io::stdin();

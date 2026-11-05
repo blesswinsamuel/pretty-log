@@ -92,6 +92,44 @@ fn exits_nonzero_when_stdin_cannot_be_read() {
     assert!(!stderr.contains("Os {"), "diagnostics should use Display formatting: {stderr:?}");
 }
 
+#[test]
+fn applies_utc_and_time_format_flags() {
+    let mut child = Command::new(env!("CARGO_BIN_EXE_pretty-log"))
+        .args(["--utc", "--time-format", "%Y-%m-%d %H:%M:%S%.3f", "--color", "never"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn pretty-log binary");
+
+    child
+        .stdin
+        .as_mut()
+        .expect("stdin handle")
+        .write_all(b"{\"time\":1624829360868,\"level\":30,\"message\":\"x\"}\n")
+        .expect("write input");
+
+    let output = child.wait_with_output().expect("wait for pretty-log");
+    assert!(output.status.success(), "binary should exit successfully");
+    assert_eq!(
+        String::from_utf8(output.stdout).expect("utf8 stdout").trim_end(),
+        "2021-06-27 21:29:20.868  INFO x"
+    );
+}
+
+#[test]
+fn rejects_invalid_time_format() {
+    let output = Command::new(env!("CARGO_BIN_EXE_pretty-log"))
+        .args(["--time-format", "%Q"])
+        .stdin(Stdio::null())
+        .output()
+        .expect("run pretty-log");
+
+    assert_eq!(output.status.code(), Some(2), "usage errors should exit 2");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("invalid --time-format"), "{stderr:?}");
+}
+
 fn run_pretty_log_bytes(input: &[u8]) -> Vec<u8> {
     let mut child = Command::new(env!("CARGO_BIN_EXE_pretty-log"))
         .stdin(Stdio::piped())

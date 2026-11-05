@@ -13,6 +13,13 @@ pub struct FormatOptions {
     pub include_fields: Option<HashSet<String>>,
     pub exclude_fields: HashSet<String>,
     pub field_order: Vec<String>,
+    pub utc: bool,
+    pub time_format: Option<String>,
+}
+
+/// Whether `format` is a usable chrono strftime format string.
+pub fn is_valid_time_format(format: &str) -> bool {
+    !chrono::format::StrftimeItems::new(format).any(|item| matches!(item, chrono::format::Item::Error))
 }
 
 pub fn format_line(line: &str, opts: &FormatOptions) -> String {
@@ -31,7 +38,7 @@ pub fn format_line(line: &str, opts: &FormatOptions) -> String {
         return line.to_string();
     }
 
-    let (time_str, time_key) = get_time(obj, &opts.time_field);
+    let (time_str, time_key) = get_time(obj, opts);
     // Only pad the level when a time column precedes it, so a line without a time starts flush left.
     let (level_str, level_key) = get_level(obj, &opts.level_field, !time_str.is_empty());
     let (message_lines, message_key) = get_message(obj, &opts.message_field);
@@ -77,22 +84,35 @@ fn escape_control_chars(value: &str) -> Cow<'_, str> {
     Cow::Owned(escaped)
 }
 
-fn get_time(obj: &Map<String, Value>, key: &str) -> (ColoredString, String) {
-    fn human_readable_date_from_string(s: &str) -> Option<DateTime<Local>> {
-        dateparser::parse_with_timezone(s, &Local).map(|v| v.with_timezone(&Local)).ok()
+fn get_time(obj: &Map<String, Value>, opts: &FormatOptions) -> (ColoredString, String) {
+    fn date_from_seconds(seconds: i64, nanos: u32, utc: bool) -> Option<DateTime<FixedOffset>> {
+        if utc {
+            Utc.timestamp_opt(seconds, nanos).single().map(|d| d.fixed_offset())
+        } else {
+            Local.timestamp_opt(seconds, nanos).single().map(|d| d.fixed_offset())
+        }
     }
 
-    fn human_readable_date_from_int(v: i64) -> Option<DateTime<Local>> {
+    fn date_from_string(s: &str, utc: bool) -> Option<DateTime<FixedOffset>> {
+        // dateparser returns the parsed instant with a UTC offset, so convert it for local display.
+        if utc {
+            dateparser::parse_with_timezone(s, &Utc).ok().map(|d| d.fixed_offset())
+        } else {
+            dateparser::parse_with_timezone(s, &Local).ok().map(|d| d.with_timezone(&Local).fixed_offset())
+        }
+    }
+
+    fn date_from_int(v: i64, utc: bool) -> Option<DateTime<FixedOffset>> {
         if v <= 1e11 as i64 {
-            Local.timestamp_opt(v, 0).single()
+            date_from_seconds(v, 0, utc)
         } else if v < 1e14 as i64 {
-            Local.timestamp_millis_opt(v).single()
+            date_from_seconds(v.div_euclid(1000), (v.rem_euclid(1000) * 1_000_000) as u32, utc)
         } else {
             None
         }
     }
 
-    fn human_readable_date_from_float(v: f64) -> Option<DateTime<Local>> {
+    fn date_from_float(v: f64, utc: bool) -> Option<DateTime<FixedOffset>> {
         // Fractional timestamps are epoch seconds below 1e11 and epoch milliseconds above it.
         let seconds = if v.abs() <= 1e11 {
             v
@@ -105,28 +125,30 @@ fn get_time(obj: &Map<String, Value>, key: &str) -> (ColoredString, String) {
         let nanos = ((seconds - seconds.floor()) * 1e9).round() as u32;
         // Rounding the fraction up to a full second must carry into the seconds.
         let (secs, nanos) = if nanos >= 1_000_000_000 { (secs + 1, 0) } else { (secs, nanos) };
-        Local.timestamp_opt(secs, nanos).single()
+        date_from_seconds(secs, nanos, utc)
     }
 
-    for key in key.split(',') {
+    let now = if opts.utc { Utc::now().fixed_offset() } else { Local::now().fixed_offset() };
+
+    for key in opts.time_field.split(',') {
         let v = match obj.get(key) {
             Some(v) => v,
             None => continue,
         };
         let date = match v {
             Value::Number(n) => match n.as_i64() {
-                Some(v) => human_readable_date_from_int(v),
-                None => n.as_f64().and_then(human_readable_date_from_float),
+                Some(v) => date_from_int(v, opts.utc),
+                None => n.as_f64().and_then(|v| date_from_float(v, opts.utc)),
             },
-            Value::String(s) => human_readable_date_from_string(s),
+            Value::String(s) => date_from_string(s, opts.utc),
             _ => None,
         };
-        let now = Local::now();
         let v = match date {
-            Some(d) if d.day() != now.day() || d.month() != now.month() || d.year() != now.year() => {
-                format!("{}", d.format("%Y-%m-%d %H:%M:%S.%3f"))
-            }
-            Some(d) => format!("{}", d.format("%H:%M:%S.%3f")),
+            Some(d) => match &opts.time_format {
+                Some(format) => d.format(format).to_string(),
+                None if d.date_naive() != now.date_naive() => format!("{}", d.format("%Y-%m-%d %H:%M:%S.%3f")),
+                None => format!("{}", d.format("%H:%M:%S.%3f")),
+            },
             None => match v {
                 Value::Number(n) => n.to_string(),
                 Value::String(s) => escape_control_chars(s).into_owned(),
@@ -411,6 +433,8 @@ mod tests {
             include_fields: None,
             exclude_fields: HashSet::new(),
             field_order: Vec::new(),
+            utc: false,
+            time_format: None,
         }
     }
 
@@ -490,11 +514,29 @@ mod tests {
             let fractional = json!({ "time": value });
             let whole = json!({ "time": equivalent_millis });
 
-            let (fractional, _) = get_time(fractional.as_object().unwrap(), "time");
-            let (whole, _) = get_time(whole.as_object().unwrap(), "time");
+            let (fractional, _) = get_time(fractional.as_object().unwrap(), &test_options());
+            let (whole, _) = get_time(whole.as_object().unwrap(), &test_options());
 
             assert_eq!(fractional.to_string(), whole.to_string());
         }
+    }
+
+    #[test]
+    fn get_time_formats_in_utc_with_custom_format() {
+        disable_colors();
+
+        let mut opts = test_options();
+        opts.utc = true;
+        opts.time_format = Some("%Y-%m-%d %H:%M:%S%.3f".to_string());
+
+        let line = r#"{"time":1624829360868,"level":30,"message":"x"}"#;
+        assert_eq!(format_line(line, &opts), "2021-06-27 21:29:20.868  INFO x");
+    }
+
+    #[test]
+    fn time_format_validation_rejects_unknown_specifiers() {
+        assert!(is_valid_time_format("%Y-%m-%d %H:%M:%S%.3f"));
+        assert!(!is_valid_time_format("%Q"));
     }
 
     #[test]
