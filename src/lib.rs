@@ -122,6 +122,16 @@ fn get_level(obj: &Map<String, Value>, key: &str, pad: bool) -> (ColoredString, 
         }
     }
 
+    fn normalize_string_log_level(v: &str) -> String {
+        match v.to_lowercase().as_str() {
+            "warning" => "warn".to_string(),
+            "err" => "error".to_string(),
+            "crit" | "critical" | "alert" | "emerg" | "emergency" => "fatal".to_string(),
+            "notice" => "info".to_string(),
+            other => other.to_string(),
+        }
+    }
+
     fn colorize_log_level(v: String, pad: bool) -> ColoredString {
         let pad_level = |s: String| if pad { format!("{:>5}", s) } else { s };
         match v.as_str() {
@@ -143,7 +153,7 @@ fn get_level(obj: &Map<String, Value>, key: &str, pad: bool) -> (ColoredString, 
         };
         let normalized_level = match v {
             Value::Number(n) => normalize_int_log_level(n.as_u64().unwrap_or(0)),
-            Value::String(s) => s.clone(),
+            Value::String(s) => normalize_string_log_level(s),
             _ => format!("invalid ({})", v),
         };
         return (colorize_log_level(normalized_level.to_uppercase(), pad), key.to_string());
@@ -353,6 +363,21 @@ mod tests {
 
         assert!(formatted.contains("ERROR"));
         assert!(formatted.contains("boom"));
+    }
+
+    #[test]
+    fn format_line_maps_level_synonyms() {
+        disable_colors();
+
+        for (line, expected) in [
+            (r#"{"level":"warning","message":"x"}"#, "WARN x"),
+            (r#"{"level":"WARNING","message":"x"}"#, "WARN x"),
+            (r#"{"level":"err","message":"x"}"#, "ERROR x"),
+            (r#"{"level":"critical","message":"x"}"#, "FATAL x"),
+            (r#"{"level":"notice","message":"x"}"#, "INFO x"),
+        ] {
+            assert_eq!(format_line(line, &test_options()), expected);
+        }
     }
 
     #[test]
