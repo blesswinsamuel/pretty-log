@@ -72,9 +72,9 @@ fn main() -> ExitCode {
         }
     }
     let format_opts = FormatOptions {
-        time_field: opts.time_field.clone(),
-        level_field: opts.level_field.clone(),
-        message_field: opts.message_field.clone(),
+        time_field: parse_field_list(&opts.time_field),
+        level_field: parse_field_list(&opts.level_field),
+        message_field: parse_field_list(&opts.message_field),
         include_fields: (!include_fields.is_empty()).then(|| include_fields.iter().cloned().collect()),
         exclude_fields: parse_field_list(&opts.exclude_fields).into_iter().collect(),
         field_order: parse_field_list(&opts.field_order),

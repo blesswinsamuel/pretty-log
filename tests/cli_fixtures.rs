@@ -130,6 +130,37 @@ fn rejects_invalid_time_format() {
     assert!(stderr.contains("invalid --time-format"), "{stderr:?}");
 }
 
+fn run_pretty_log_with_args(args: &[&str], input: &[u8]) -> String {
+    let mut child = Command::new(env!("CARGO_BIN_EXE_pretty-log"))
+        .args(args)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn pretty-log binary");
+
+    child.stdin.as_mut().expect("stdin handle").write_all(input).expect("write fixture input");
+
+    let output = child.wait_with_output().expect("wait for pretty-log");
+    assert!(output.status.success(), "binary should exit successfully");
+
+    strip_ansi(&String::from_utf8(output.stdout).expect("utf8 stdout"))
+}
+
+#[test]
+fn applies_include_exclude_and_order_flags() {
+    let input = b"{\"level\":30,\"message\":\"x\",\"service\":\"api\",\"req\":{\"id\":\"r1\",\"method\":\"POST\"},\"pid\":1}\n";
+
+    let included = run_pretty_log_with_args(&["--include-fields", "req.id,service"], input);
+    assert_eq!(included, "INFO x service=\"api\" req={id:\"r1\"}\n");
+
+    let excluded = run_pretty_log_with_args(&["--exclude-fields", "req.method,pid"], input);
+    assert_eq!(excluded, "INFO x service=\"api\" req={id:\"r1\"}\n");
+
+    let ordered = run_pretty_log_with_args(&["--field-order", "req.method,req"], input);
+    assert_eq!(ordered, "INFO x req={method:\"POST\", id:\"r1\"} service=\"api\" pid=1\n");
+}
+
 fn run_pretty_log_bytes(input: &[u8]) -> Vec<u8> {
     let mut child = Command::new(env!("CARGO_BIN_EXE_pretty-log"))
         .stdin(Stdio::piped())

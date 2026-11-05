@@ -17,11 +17,13 @@ After:
 ## Features
 
 - Human-friendly formatting for structured JSON logs
-- Automatic handling for string and numeric log levels (including Pino's `10-60` scale)
+- Automatic handling for string and numeric log levels (including common synonyms and Pino's `10-60` scale)
 - Configurable field aliases for time, level, and message
-- Optional include/exclude controls for non-core fields
+- Optional include/exclude controls for non-core fields, including nested `req.id` paths
 - Optional field ordering for extra context
-- Readable multiline stack trace rendering
+- Local or UTC timestamps with optional custom formatting
+- Readable multiline rendering for stack traces and messages, at any depth
+- Control characters in log content are escaped, so they cannot drive the terminal
 - Safe passthrough for non-JSON lines and non-object JSON values
 
 ## Installation
@@ -70,20 +72,33 @@ cat test/logs_pino.txt | cargo run --quiet -- --color never
 ## CLI Options
 
 ```text
+Parses JSON logs and prints them in a clean, colorized view for humans.
+
 Usage: pretty-log [OPTIONS]
 
 Options:
-	-t, --time-field <TIME_FIELD>        Field that represents time [default: time,timestamp]
-	-l, --level-field <LEVEL_FIELD>      Field that represents level [default: level,lvl]
-	-m, --message-field <MESSAGE_FIELD>  Field that represents message [default: message,msg]
-			--include-fields <INCLUDE_FIELDS>
-																			 Comma-separated non-core fields to include in output
-			--exclude-fields <EXCLUDE_FIELDS>
-																			 Comma-separated non-core fields to hide from output
-			--field-order <FIELD_ORDER>      Comma-separated preferred order for non-core fields
-			--color <COLOR>                  Color mode: auto, always, never [default: auto]
-	-h, --help                           Print help
-	-V, --version                        Print version
+  -t, --time-field <TIME_FIELD>
+          Field that represents time [default: time,timestamp]
+  -l, --level-field <LEVEL_FIELD>
+          Field that represents level [default: level,lvl]
+  -m, --message-field <MESSAGE_FIELD>
+          Field that represents message [default: message,msg]
+      --include-fields <INCLUDE_FIELDS>
+          Comma-separated non-core fields to include in the output; dotted paths select nested fields [default: ]
+      --exclude-fields <EXCLUDE_FIELDS>
+          Comma-separated non-core fields to hide from the output; dotted paths hide nested fields [default: ]
+      --field-order <FIELD_ORDER>
+          Comma-separated preferred order for non-core fields; dotted paths order nested fields [default: ]
+      --utc
+          Display timestamps in UTC instead of the local timezone
+      --time-format <TIME_FORMAT>
+          strftime-style format for timestamps, e.g. "%Y-%m-%d %H:%M:%S%.3f"
+      --color <COLOR>
+          When to use colorized output [default: auto] [possible values: auto, always, never]
+  -h, --help
+          Print help
+  -V, --version
+          Print version
 ```
 
 ## Examples
@@ -104,6 +119,12 @@ Field names may be dotted paths, so nested fields can be selected, hidden, or or
 
 ```sh
 cat test/logs.txt | pretty-log --include-fields service,req.id --exclude-fields req.method
+```
+
+Show timestamps in UTC with a fixed format:
+
+```sh
+cat test/logs.txt | pretty-log --utc --time-format "%Y-%m-%d %H:%M:%S%.3f"
 ```
 
 Force plain output (no ANSI colors):

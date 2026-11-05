@@ -7,9 +7,9 @@ use std::collections::HashSet;
 
 #[derive(Debug, Clone)]
 pub struct FormatOptions {
-    pub time_field: String,
-    pub level_field: String,
-    pub message_field: String,
+    pub time_field: Vec<String>,
+    pub level_field: Vec<String>,
+    pub message_field: Vec<String>,
     pub include_fields: Option<HashSet<String>>,
     pub exclude_fields: HashSet<String>,
     pub field_order: Vec<String>,
@@ -130,7 +130,7 @@ fn get_time(obj: &Map<String, Value>, opts: &FormatOptions) -> (ColoredString, S
 
     let now = if opts.utc { Utc::now().fixed_offset() } else { Local::now().fixed_offset() };
 
-    for key in opts.time_field.split(',') {
+    for key in &opts.time_field {
         let v = match obj.get(key) {
             Some(v) => v,
             None => continue,
@@ -155,13 +155,13 @@ fn get_time(obj: &Map<String, Value>, opts: &FormatOptions) -> (ColoredString, S
                 _ => v.to_string(),
             },
         };
-        return (v.color(Color::BrightBlack), key.to_string());
+        return (v.color(Color::BrightBlack), key.clone());
     }
 
     (ColoredString::default(), String::new())
 }
 
-fn get_level(obj: &Map<String, Value>, key: &str, pad: bool) -> (ColoredString, String) {
+fn get_level(obj: &Map<String, Value>, keys: &[String], pad: bool) -> (ColoredString, String) {
     fn normalize_int_log_level(v: u64) -> String {
         match v {
             10 => "trace".to_string(),
@@ -198,7 +198,7 @@ fn get_level(obj: &Map<String, Value>, key: &str, pad: bool) -> (ColoredString, 
         }
     }
 
-    for key in key.split(',') {
+    for key in keys {
         let v = match obj.get(key) {
             Some(v) => v,
             None => continue,
@@ -208,14 +208,14 @@ fn get_level(obj: &Map<String, Value>, key: &str, pad: bool) -> (ColoredString, 
             Value::String(s) => normalize_string_log_level(&escape_control_chars(s)),
             _ => format!("invalid ({})", v),
         };
-        return (colorize_log_level(normalized_level.to_uppercase(), pad), key.to_string());
+        return (colorize_log_level(normalized_level.to_uppercase(), pad), key.clone());
     }
 
     (ColoredString::default(), String::new())
 }
 
-fn get_message(obj: &Map<String, Value>, key: &str) -> (Vec<ColoredString>, String) {
-    for key in key.split(',') {
+fn get_message(obj: &Map<String, Value>, keys: &[String]) -> (Vec<ColoredString>, String) {
+    for key in keys {
         let v = match obj.get(key) {
             Some(v) => v,
             None => continue,
@@ -228,7 +228,7 @@ fn get_message(obj: &Map<String, Value>, key: &str) -> (Vec<ColoredString>, Stri
                 .collect(),
             _ => vec![v.to_string().color(Color::BrightRed).bold()],
         };
-        return (lines, key.to_string());
+        return (lines, key.clone());
     }
 
     (Vec::new(), String::new())
@@ -427,9 +427,9 @@ mod tests {
 
     fn test_options() -> FormatOptions {
         FormatOptions {
-            time_field: "time,timestamp".to_string(),
-            level_field: "level,lvl".to_string(),
-            message_field: "message,msg".to_string(),
+            time_field: vec!["time".to_string(), "timestamp".to_string()],
+            level_field: vec!["level".to_string(), "lvl".to_string()],
+            message_field: vec!["message".to_string(), "msg".to_string()],
             include_fields: None,
             exclude_fields: HashSet::new(),
             field_order: Vec::new(),
