@@ -168,8 +168,8 @@ cargo test
 Releases are built and published by [cargo-dist](https://axodotdev.github.io/cargo-dist/) when a version tag is pushed:
 
 ```sh
-git tag v0.1.1
-git push origin v0.1.1
+git tag v0.3.0
+git push origin v0.3.0
 ```
 
 Each release includes prebuilt binaries for Linux and macOS, SHA-256 checksums, a shell installer, and a Homebrew formula published to [`blesswinsamuel/homebrew-tap`](https://github.com/blesswinsamuel/homebrew-tap).
